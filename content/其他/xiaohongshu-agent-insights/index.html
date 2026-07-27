@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agentic 工具的两个方向</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:        #0d0f14;
+    --surface:   #161921;
+    --surface2:  #1c1f2b;
+    --text:      #e8eaef;
+    --text-2:    #9399a6;
+    --text-3:    #646b79;
+    --accent-1:  #45c4f0;
+    --accent-2:  #f0a848;
+    --green:     #34d399;
+    --red:       #f87171;
+    --border:    #252836;
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, -apple-system, sans-serif;
+    --font-mono: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+  }
+
+  html { font-size: 17px; scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ══════════════════════════════════════════
+     PAGE CONTAINER — 5 equal-width cards
+     ══════════════════════════════════════════ */
+  .deck {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+    padding: 40px 0 80px;
+  }
+
+  .card {
+    width: 750px;
+    min-height: 1000px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 56px 56px 48px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ── Page indicator ── */
+  .card-pager {
+    position: absolute;
+    top: 24px; right: 28px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-3);
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+    background: var(--surface);
+    padding: 4px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+
+  /* ══════════════════════════════════════════
+     PAGE 1 — COVER
+     ══════════════════════════════════════════ */
+  .cover {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .cover-ambient {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(60px);
+    opacity: 0.28;
+  }
+  .cover-ambient--a {
+    width: 320px; height: 320px;
+    background: var(--accent-1);
+    top: 80px; left: -80px;
+  }
+  .cover-ambient--b {
+    width: 260px; height: 260px;
+    background: var(--accent-2);
+    bottom: 100px; right: -60px;
+  }
+  .cover-orb {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    border: 1px solid;
+  }
+  .cover-orb--a {
+    width: 180px; height: 180px;
+    border-color: rgba(69, 196, 240, 0.28);
+    top: 160px; left: 60px;
+  }
+  .cover-orb--b {
+    width: 140px; height: 140px;
+    border-color: rgba(240, 168, 72, 0.28);
+    bottom: 200px; right: 80px;
+  }
+  .cover-line {
+    position: absolute;
+    pointer-events: none;
+  }
+  .cover-line::before {
+    content: '';
+    position: absolute;
+    width: 1px; height: 60px;
+    background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.14), transparent);
+  }
+  .cover-line--1 { top: 280px; left: 220px; transform: rotate(-30deg); }
+  .cover-line--2 { bottom: 260px; right: 230px; transform: rotate(25deg); }
+
+  .cover-content {
+    position: relative;
+    z-index: 1;
+  }
+  .cover-eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    color: var(--text-3);
+    margin-bottom: 28px;
+  }
+  .cover-eyebrow .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent-1);
+    margin-right: 8px;
+    vertical-align: middle;
+    position: relative; top: -1px;
+  }
+  .cover h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    margin-bottom: 20px;
+  }
+  .cover h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, var(--accent-1) 10%, var(--accent-2) 90%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .cover-sub {
+    font-size: 1rem;
+    color: var(--text-2);
+    max-width: 440px;
+    margin: 0 auto 40px;
+    line-height: 1.7;
+  }
+  .cover-meta {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    font-size: 0.78rem;
+    color: var(--text-3);
+  }
+  .cover-meta span {
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  /* ══════════════════════════════════════════
+     SHARED CONTENT-PAGE STYLES
+     ══════════════════════════════════════════ */
+  .page-header {
+    margin-bottom: 36px;
+  }
+  .page-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .page-kicker--a { color: var(--accent-1); }
+  .page-kicker--b { color: var(--accent-2); }
+  .page-kicker .kicker-dot {
+    width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+  }
+  .kicker-dot--a { background: var(--accent-1); }
+  .kicker-dot--b { background: var(--accent-2); }
+
+  .page-header h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+  }
+  .page-header .sub {
+    font-size: 0.85rem;
+    color: var(--text-3);
+    margin-top: 6px;
+  }
+
+  .page-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── Components ── */
+  .c-insight {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 28px;
+  }
+  .c-insight--a { border-left: 3px solid var(--accent-1); }
+  .c-insight--b { border-left: 3px solid var(--accent-2); }
+  .c-insight-label {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 5px;
+    margin-bottom: 12px;
+  }
+  .c-insight-label--a { background: rgba(69, 196, 240, 0.1); color: var(--accent-1); }
+  .c-insight-label--b { background: rgba(240, 168, 72, 0.1); color: var(--accent-2); }
+  .c-insight p { font-size: 0.93rem; color: var(--text-2); line-height: 1.8; }
+  .c-insight p strong { color: var(--text); font-weight: 600; }
+
+  .c-formula {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 28px 20px;
+    background: var(--surface);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+  }
+  .c-formula .op { color: var(--text-3); font-weight: 600; }
+  .c-formula .term {
+    background: rgba(69, 196, 240, 0.08);
+    color: var(--accent-1);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .c-formula .result {
+    color: var(--green);
+    font-weight: 700;
+    font-size: 0.88rem;
+  }
+
+  .c-compare {
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .c-compare-col {
+    padding: 28px 24px;
+  }
+  .c-compare-col h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .c-compare-col h3 .d { width: 8px; height: 8px; border-radius: 50%; }
+  .d--flow { background: var(--accent-1); }
+  .d--auto { background: var(--green); }
+  .c-compare-col p { font-size: 0.84rem; color: var(--text-2); line-height: 1.75; }
+  .c-compare-col p strong { color: var(--text); }
+  .c-compare-div { background: var(--border); width: 1px; }
+
+  .c-hl {
+    border-left: 3px solid var(--accent-1);
+    padding: 2px 0 2px 18px;
+  }
+  .c-hl--b { border-left-color: var(--accent-2); }
+  .c-hl p { font-size: 0.93rem; color: var(--text); line-height: 1.8; font-weight: 500; }
+  .c-hl p em { font-style: normal; color: var(--accent-1); }
+  .c-hl--b p em { color: var(--accent-2); }
+
+  .c-finding {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+  }
+  .c-finding-icon {
+    flex-shrink: 0;
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.82rem; font-weight: 700;
+  }
+  .c-finding-icon--bad  { background: rgba(248, 113, 113, 0.1); color: var(--red); }
+  .c-finding-icon--good { background: rgba(52, 211, 153, 0.1); color: var(--green); }
+  .c-finding-text { font-size: 0.87rem; color: var(--text-2); line-height: 1.7; }
+  .c-finding-text strong { color: var(--text); }
+
+  .c-bullet-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    font-size: 0.88rem;
+    color: var(--text-2);
+    line-height: 1.7;
+  }
+  .c-bullet {
+    flex-shrink: 0;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-top: 0.55em;
+  }
+  .c-bullet--a { background: var(--accent-1); }
+  .c-bullet--b { background: var(--accent-2); }
+
+  .c-tag-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .c-tag {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 20px;
+    background: var(--surface2);
+    color: var(--text-3);
+    border: 1px solid var(--border);
+  }
+
+  .c-takeaway {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 26px;
+  }
+  .c-takeaway-num {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    margin-right: 10px;
+    vertical-align: middle;
+    position: relative; top: -1px;
+  }
+  .c-takeaway-num--1 { background: rgba(69, 196, 240, 0.12); color: var(--accent-1); }
+  .c-takeaway-num--2 { background: rgba(240, 168, 72, 0.12); color: var(--accent-2); }
+  .c-takeaway h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+    display: inline;
+  }
+  .c-takeaway p { font-size: 0.85rem; color: var(--text-2); line-height: 1.75; margin-top: 4px; }
+
+  /* ── Page footer decoration ── */
+  .page-footer-dots {
+    display: flex; gap: 6px; align-items: center;
+    margin-top: auto; padding-top: 24px;
+  }
+  .page-footer-dots span {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--border);
+  }
+  .page-footer-dots span.active { background: var(--text-3); }
+
+  /* ══════════════════════════════════════════
+     RESPONSIVE
+     ══════════════════════════════════════════ */
+  @media (max-width: 800px) {
+    .card {
+      width: calc(100vw - 32px);
+      min-height: auto;
+      padding: 40px 28px 36px;
+      border-radius: 16px;
+    }
+    .cover h1 { font-size: 2rem; }
+    .c-compare { grid-template-columns: 1fr; }
+    .c-compare-div { width: 100%; height: 1px; }
+    .page-header h2 { font-size: 1.3rem; }
+    .c-formula { font-size: 0.75rem; gap: 6px; }
+    .c-formula .term { font-size: 0.7rem; padding: 4px 10px; }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .c-insight, .c-finding, .c-compare {
+      transition: border-color 0.25s ease;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- ═══════════════════════════════════════
+       PAGE 1 — COVER
+       ═══════════════════════════════════════ -->
+  <div class="card cover">
+    <div class="cover-ambient cover-ambient--a"></div>
+    <div class="cover-ambient cover-ambient--b"></div>
+    <div class="cover-orb cover-orb--a"></div>
+    <div class="cover-orb cover-orb--b"></div>
+    <div class="cover-line cover-line--1"></div>
+    <div class="cover-line cover-line--2"></div>
+
+    <div class="card-pager">1 / 5</div>
+
+    <div class="cover-content">
+      <div class="cover-eyebrow"><span class="dot"></span>周末探索 · 2026.07.26</div>
+      <h1>Agentic 工具的<br><em>两个方向</em></h1>
+      <p class="cover-sub">
+        LLM + Browser + VLM 自动化 E2E 测试的新范式<br>
+        以及人类方法论在 Agent Loop 中的实验与反思
+      </p>
+      <div class="cover-meta">
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>实验驱动</span>
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/><line x1="12" y1="22" x2="12" y2="15.5"/><polyline points="22 8.5 12 15.5 2 8.5"/></svg>原创思考</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 2 — Direction 1: The Formula
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="card-pager">2 / 5</div>
+
+    <div class="page-header">
+      <div class="page-kicker page-kicker--a">
+        <span class="kicker-dot kicker-dot--a"></span>方向一 · 自动化 E2E
+      </div>
+      <h2>补全自动化测试的<br>最后一块拼图</h2>
+      <div class="sub">LLM Driver + Browser Tool + VLM MCP = E2E SOTA</div>
+    </div>
+
+    <div class="page-body">
+      <div class="c-formula">
+        <span class="term">LLM Driver</span>
+        <span class="op">+</span>
+        <span class="term">Browser Tool</span>
+        <span class="op">+</span>
+        <span class="term">VLM MCP</span>
+        <span class="op">→</span>
+        <span class="result">E2E SOTA</span>
+      </div>
+
+      <div class="c-insight c-insight--a">
+        <div class="c-insight-label c-insight-label--a">核心价值</div>
+        <p>
+          方向 1 并不复杂。它的意义在于——<strong>自动化 Coding 之后，自动化测试是最后一块缺失的拼图</strong>。
+          这个组合恰好补齐了它。LLM 驱动逻辑、Browser 执行操作、VLM 判断结果，三个组件各自成熟，拼在一起就是 E2E 测试的工业化答案。
+        </p>
+      </div>
+
+      <div class="c-insight" style="border-left: 3px solid var(--green);">
+        <div class="c-insight-label" style="background:rgba(52,211,153,0.1);color:var(--green);">为什么是现在</div>
+        <p>
+          自动化 Coding 已相对成熟，测试成为瓶颈。<strong>三个组件的成本曲线同时在 2025–2026 进入可用区间</strong>——LLM 推理足够便宜、浏览器自动化足够稳定、视觉理解足够准确。组合门槛消失。
+        </p>
+      </div>
+
+      <div class="c-bullet-row" style="margin-top:4px;">
+        <span class="c-bullet c-bullet--a"></span>
+        <span>未来 Agentic 工具必然沿 <strong>两个维度</strong> 分化</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--a"></span>
+        <span><strong>人机心流对话</strong> — 高维决策领域，Human in the Loop 是核心</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--a"></span>
+        <span><strong>机器自动化执行</strong> — 规模化 + 高效率，「能用 + 廉价」是唯一前提</span>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span class="active"></span><span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 3 — Direction 1: Two Paths Deep Dive
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="card-pager">3 / 5</div>
+
+    <div class="page-header">
+      <div class="page-kicker page-kicker--a">
+        <span class="kicker-dot kicker-dot--a"></span>方向一 · 深入
+      </div>
+      <h2>心流 vs 自动化：<br>Agentic 工具的两个维度</h2>
+    </div>
+
+    <div class="page-body">
+      <!-- Two paths -->
+      <div class="c-compare">
+        <div class="c-compare-col">
+          <h3><span class="d d--flow"></span> 人机心流对话</h3>
+          <p>
+            <strong>高维决策领域</strong>，Human in the Loop 是核心。SOTA 意图理解模型占据生态位。<br><br>
+            工具朝<strong>极致易用、不打断思考</strong>演化，形态向 Desktop 趋同。<br><br>
+            Anthropic / OpenAI 做桌面端的原因就在这里——桌面端体验上限必定超过 Web。
+          </p>
+        </div>
+        <div class="c-compare-div"></div>
+        <div class="c-compare-col">
+          <h3><span class="d d--auto"></span> 机器自动化执行</h3>
+          <p>
+            <strong>规模化与高效率</strong>是关键词。<br><br>
+            「低成本 + 可用」在这里发挥最大价值。<br><br>
+            「可用」已被一线甚至二线模型攻破。工业化前提只有两点：<strong>能用 + 廉价</strong>。
+          </p>
+        </div>
+      </div>
+
+      <div class="c-hl">
+        <p>
+          随着模型越来越强，Agentic 工具的 Harness 设计已被 <em>模型内化</em>。
+          未来架构将趋向 Pi Agent 式轻量设计。
+        </p>
+      </div>
+
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--a"></span>
+        <span>未来 6–12 个月，重心从<strong>「提稳」</strong>转向<strong>「降本」</strong></span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--a"></span>
+        <span>AI 生成稳定性持续提升，初创公司引进 AI 门槛进一步降低</span>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span></span><span class="active"></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 4 — Direction 2: Pyramid Experiment
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="card-pager">4 / 5</div>
+
+    <div class="page-header">
+      <div class="page-kicker page-kicker--b">
+        <span class="kicker-dot kicker-dot--b"></span>方向二 · 方法论实验
+      </div>
+      <h2>人类方法论 × Agent<br>Re-act Loop</h2>
+      <div class="sub">金字塔结构能否提升生成质量？</div>
+    </div>
+
+    <div class="page-body">
+      <div class="c-insight c-insight--b">
+        <div class="c-insight-label c-insight-label--b">灵感来源</div>
+        <p>
+          整理书架翻到<strong>《结构思考力》</strong>（李中秋）—— 这套通用逻辑思维框架，能否让 Agent 用起来？ 基于此设计了一套 MCP tool，在 Re-act Loop 中让 Agent 自主调用工具完成金字塔结构的构建：<strong>问题定义 → 逐层分解 → 重要性排序 → 归纳结论</strong>。
+        </p>
+      </div>
+
+      <p style="font-size:0.82rem; color:var(--text-3); font-style:italic; text-align:center;">
+        测试场景：竞品分析 &nbsp;·&nbsp; 复杂代码重构
+      </p>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div class="c-finding">
+          <div class="c-finding-icon c-finding-icon--bad"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+          <div class="c-finding-text">
+            <strong>金字塔结构</strong><br>
+            损失信息密度，多轮 Tool Use 拉长链路，Token 消耗约为基线的 <strong>2–3 倍</strong>，但输出质量<strong>无显著提升</strong>
+          </div>
+        </div>
+        <div class="c-finding">
+          <div class="c-finding-icon c-finding-icon--good"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="c-finding-text">
+            <strong>无金字塔（基线）</strong><br>
+            信息密度高，追问「总结提炼」即可达到类似的结构化效果，<strong>更灵活且 Token 效率更高</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-hl c-hl--b">
+        <p>
+          <em>根本原因：</em>金字塔结构解决的是<strong>分散人脑认知负荷</strong>——
+          LLM 没有这个瓶颈。拉长对话、增加中间步骤反而导致上下文稀释，生成质量不升反降。
+        </p>
+      </div>
+
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--b"></span>
+        <span>多轮输出 + 思维链 + Tool Use → Token 消耗远超基线，性价比低</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--b"></span>
+        <span><strong>人类认知瓶颈 ≠ 模型瓶颈</strong>，直接套用人类框架可能适得其反</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--b"></span>
+        <span>好的 Agent 设计应<strong>发挥模型优势</strong>，而非模拟人类思维路径</span>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span></span><span></span><span class="active"></span><span></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 5 — Summary & Takeaway
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="card-pager">5 / 5</div>
+
+    <div class="page-header">
+      <div class="page-kicker" style="color:var(--text-2);">
+        <span class="kicker-dot" style="background:var(--text-2);"></span>小结
+      </div>
+      <h2>两个方向，<br>两个结论</h2>
+    </div>
+
+    <div class="page-body">
+      <div class="c-takeaway" style="border-left: 3px solid var(--accent-1);">
+        <span class="c-takeaway-num c-takeaway-num--1">1</span>
+        <h3>方向一：确定性强的工业化路径</h3>
+        <p>
+          LLM + Browser + VLM 组合廉价可用，E2E 自动化测试的工业化前提已经具备。
+          未来半年重点是<strong>降本而非提稳</strong>。Agentic 工具朝两个维度分化——
+          心流对话（Desktop 体验为王）和自动化执行（便宜+能用为王）。
+        </p>
+      </div>
+
+      <div class="c-takeaway" style="border-left: 3px solid var(--accent-2); margin-top:16px;">
+        <span class="c-takeaway-num c-takeaway-num--2">2</span>
+        <h3>方向二：否定性结论也是收获</h3>
+        <p>
+          并非所有人类方法论都适合迁移到 Agent。<strong>人类的认知瓶颈 ≠ 模型的瓶颈</strong>。
+          金字塔结构解决的是人脑负荷问题，LLM 没有这个限制——强行套用人类框架，
+          反而拉长链路、增加 Token 消耗，质量不升反降。
+        </p>
+      </div>
+
+      <div style="margin-top: 8px;">
+        <div class="c-tag-strip">
+          <span class="c-tag">Agentic Tools</span>
+          <span class="c-tag">E2E Testing</span>
+          <span class="c-tag">VLM</span>
+          <span class="c-tag">Re-act Loop</span>
+          <span class="c-tag">MCP</span>
+          <span class="c-tag">Pyramid Principle</span>
+          <span class="c-tag">AI Engineering</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span></span><span></span><span></span><span class="active"></span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
