@@ -1,0 +1,41 @@
+《听过第三期》后训练：AI的真正杀手锏
+
+7月31日 DeepSeek 放出 V4-Flash-0731 正式版。模型结构完全没变——跟 Preview 版一模一样——就做了一件事：重新后训练。
+
+13B 激活参数的小模型，Agent benchmarks 全面碾压 49B 激活的 V4-Pro-Preview。就是靠更好的后训练，不靠更大的参数。
+
+预训练（Pre-training）：海量文本喂给模型，学会语法、事实、推理模式；决定 AI「知道多少」。
+
+后训练（Post-training）：也就是 RLHF、DPO 等对齐阶段；教模型怎么用这些知识干活——对话、调工具、拆任务、多步执行；决定 AI「能做什么」。
+
+可看作：预训练是买菜，后训练是炒菜。好食材重要，好厨师能把普通食材做成米其林。DeepSeek 这次证明了好厨师比好食材更重要。
+
+V4-Flash-0731 Agent 评测：
+
+Terminal Bench 2.1 82.7，Pro-Preview 67.9，提升 14.8；
+
+NL2Repo 54.2，横向看进第一梯队；
+
+Cybergym 76.7；
+
+DeepSWE 54.4；
+
+Toolathlon verified 70.3；
+
+DSBench-FullStack 68.7，DSBench-Hard 59.6。
+
+注意，以上提升全部来自后训练——模型权重、架构、参数量一概未改。整个 V4 系列预训练早已完成，Preview 后这三个月，DeepSeek 只做了一件事：调后训练。
+
+定价：输出 $0.28 / 百万 token。Claude Opus 4.6 是 $25，便宜 89 倍。MIT License，完全开源。
+
+社区调侃「梁圣又出来普度众生了」——顶级模型免费开源，价格压到地板。
+
+V4-Pro 正式版待发布。Preview 时离 Opus 4.6 只差 0.2 分（SWE-bench），Flash 已验证后训练威力，Pro 正式版大概率对标 Opus 5、Fable 5。
+
+参数规模给的是上限，后训练决定了离上限有多近。
+
+听过，比学会更重要。
+
+关注我，AI 落地，眼见为实～
+
+#AI科普 #后训练 #DeepSeek #AI工具 #听过系列

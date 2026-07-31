@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>听过 · 第三期 — 后训练（Post-training）：AI 的真正杀手锏</title>
+  <link rel="stylesheet" href="../brand.css">
+</head>
+<body>
+<div class="deck">
+
+  <!-- ═══════════════════════════════════════
+       PAGE 1 — COVER
+       ═══════════════════════════════════════ -->
+  <div class="card cover">
+    <div class="cover-blob cover-blob--a"></div>
+    <div class="cover-blob cover-blob--b"></div>
+
+    <div class="weekly-badge"><span class="wb-dot"></span>每周更新</div>
+
+    <div class="cover-content">
+      <div class="cover-issue">第 三 期 · 2026.07.31</div>
+      <div class="cover-wordmark">听过</div>
+      <div class="cover-rule"></div>
+      <h1>后训练（Post-training）：<em>AI 的真正杀手锏</em></h1>
+      <p class="cover-sub">
+        介于严肃原理与轻松科普之间<br>
+        你可以不深究其理，但应当「听过」
+      </p>
+      <div class="cover-meta">
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>约 5 分钟</span>
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/><line x1="12" y1="22" x2="12" y2="15.5"/><polyline points="22 8.5 12 15.5 2 8.5"/></svg>原创思考</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 2 — 预训练 vs 后训练
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="weekly-badge"><span class="wb-dot"></span>听过 · 第三期</div>
+
+    <div class="page-series-marker">核心概念</div>
+
+    <div class="page-header">
+      <div class="page-kicker page-kicker--brand">
+        <span class="kicker-dot kicker-dot--brand"></span>定义
+      </div>
+      <h2>预训练 vs 后训练：<br>AI 的两段成长</h2>
+      <div class="sub">就是靠更好的后训练，不靠更大的参数</div>
+    </div>
+
+    <div class="page-body">
+      <div class="c-compare">
+        <div class="c-compare-col">
+          <h3><span class="d" style="background:var(--text-3)"></span> 预训练</h3>
+          <p>
+            Pre-training；海量文本喂给模型，学会语法、事实、推理模式。<br><br>
+            决定 AI <strong>「知道多少」</strong>。
+          </p>
+        </div>
+        <div class="c-compare-div"></div>
+        <div class="c-compare-col">
+          <h3><span class="d" style="background:var(--brand)"></span> 后训练</h3>
+          <p>
+            Post-training，也就是 RLHF、DPO 等对齐阶段；教模型怎么用知识干活——对话、调工具、拆任务、多步执行。<br><br>
+            决定 AI <strong>「能做什么」</strong>。
+          </p>
+        </div>
+      </div>
+
+      <div class="c-hl">
+        <p>
+          <em>可看作：预训练是买菜，后训练是炒菜。</em>
+          好食材重要，好厨师能把普通食材做成米其林。DeepSeek 这次证明了好厨师比好食材更重要。
+        </p>
+      </div>
+
+      <div class="c-insight c-insight--brand">
+        <div class="c-insight-label c-insight-label--brand">关键事实</div>
+        <p>
+          7月31日 DeepSeek 放出 V4-Flash-0731 正式版，模型结构完全没变——跟 Preview 版一模一样——<strong>全部提升来自后训练</strong>。Preview 后这三个月，DeepSeek 只做了一件事：调后训练。
+        </p>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span class="active"></span><span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 3 — Agent 评测数据
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="weekly-badge"><span class="wb-dot"></span>听过 · 第三期</div>
+
+    <div class="page-series-marker">眼见为实</div>
+
+    <div class="page-header">
+      <div class="page-kicker page-kicker--brand">
+        <span class="kicker-dot kicker-dot--brand"></span>评测
+      </div>
+      <h2>13B 碾压 49B：<br>Agent 评测全记录</h2>
+      <div class="sub">V4-Flash-0731（13B 激活）vs V4-Pro-Preview（49B 激活）</div>
+    </div>
+
+    <div class="page-body">
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--brand"></span>
+        <span>Terminal Bench 2.1 <strong>82.7</strong>，Pro-Preview 67.9，提升 14.8；</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--brand"></span>
+        <span>NL2Repo <strong>54.2</strong>，横向看已进第一梯队；</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--brand"></span>
+        <span>Cybergym <strong>76.7</strong>；</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--brand"></span>
+        <span>DeepSWE <strong>54.4</strong>；</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--brand"></span>
+        <span>Toolathlon verified <strong>70.3</strong>；</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--brand"></span>
+        <span>DSBench-FullStack <strong>68.7</strong>，DSBench-Hard <strong>59.6</strong>；</span>
+      </div>
+
+      <div class="c-finding" style="margin-top:8px;">
+        <div class="c-finding-icon c-finding-icon--brand">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="c-finding-text">
+          <strong>注意，以上提升全部来自后训练</strong>——模型权重、架构、参数量一概未改。也就是整个 V4 系列预训练早已完成，Preview 后这三个月，DeepSeek 只做了一件事：调后训练。
+        </div>
+      </div>
+
+      <div class="c-hl">
+        <p>
+          <em>后训练不是补充工序，是 Agent 能力的决定性因素。</em>
+          参数规模给的是上限，后训练决定了离上限有多近。
+        </p>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span></span><span class="active"></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 4 — 定价与行业影响
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="weekly-badge"><span class="wb-dot"></span>听过 · 第三期</div>
+
+    <div class="page-series-marker">行业影响</div>
+
+    <div class="page-header">
+      <div class="page-kicker page-kicker--teal">
+        <span class="kicker-dot kicker-dot--teal"></span>定价
+      </div>
+      <h2>五十分之一的价格，<br>Pro 正式版还在后面</h2>
+    </div>
+
+    <div class="page-body">
+      <div class="c-compare">
+        <div class="c-compare-col">
+          <h3><span class="d" style="background:var(--teal)"></span> V4-Flash 正式版</h3>
+          <p>
+            输出 <strong>$0.28 / 百万 token</strong>；<br>
+            Claude Opus 4.6 是 $25，<strong>便宜 89 倍</strong>；<br>
+            MIT License，完全开源。
+          </p>
+        </div>
+        <div class="c-compare-div"></div>
+        <div class="c-compare-col">
+          <h3><span class="d" style="background:#c9a87c"></span> V4-Pro 正式版</h3>
+          <p>
+            待发布；Preview 时离 Opus 4.6 只差 <strong>0.2 分</strong>（SWE-bench）；<br>
+            Flash 已验证后训练威力——Pro 正式版大概率对标 <strong>Opus 5、Fable 5</strong>。
+          </p>
+        </div>
+      </div>
+
+      <div class="c-insight c-insight--teal">
+        <div class="c-insight-label c-insight-label--teal">社区反应</div>
+        <p>
+          社区调侃<strong>「梁圣又出来普度众生了」</strong>——顶级模型免费开源，价格压到地板，商业逻辑确实解释不通。
+        </p>
+      </div>
+
+      <div class="c-hl c-hl--t">
+        <p>
+          <em>13B 激活的小模型，Agent benchmarks 全面碾压 49B 激活的 V4-Pro-Preview。</em>
+          这件事的意义不在于某个模型的输赢——而在于证明了后训练这条路径的上限，远高于我们之前的估计。
+        </p>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span></span><span></span><span class="active"></span><span></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 5 — 听过 + Takeaways
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="weekly-badge"><span class="wb-dot"></span>听过 · 第三期</div>
+
+    <div class="page-series-marker">小结</div>
+
+    <div class="page-header">
+      <h2>你可以不精通，<br>但应当「听过」</h2>
+    </div>
+
+    <div class="page-body">
+      <div class="c-takeaway" style="border-left: 3px solid var(--brand);">
+        <span class="c-takeaway-num c-takeaway-num--1">1</span>
+        <h3>后训练 &gt; 参数规模</h3>
+        <p>
+          13B 激活的小模型，仅靠重新后训练，Agent 能力全面碾压 49B 激活的 Pro-Preview。
+          就是靠更好的训练方法，不靠更大的参数。参数规模给的是上限，<strong>后训练决定了离上限有多近</strong>。
+        </p>
+      </div>
+
+      <div class="c-takeaway" style="border-left: 3px solid var(--teal); margin-top:16px;">
+        <span class="c-takeaway-num c-takeaway-num--2">2</span>
+        <h3>定价碾压闭源</h3>
+        <p>
+          Flash 输出 $0.28 / 百万 token，是 Claude Opus 的 1/89。MIT 开源，任何开发者都能用上<strong>比肩一线的模型能力</strong>。后训练带来的性价比优势，正在改写 AI 服务的定价逻辑。
+        </p>
+      </div>
+
+      <div class="c-takeaway" style="border-left: 3px solid #c9a87c; margin-top:16px;">
+        <span class="c-takeaway-num c-takeaway-num--3">3</span>
+        <h3>Pro 正式版可期</h3>
+        <p>
+          Preview 时 Pro 离 Opus 4.6 只差 0.2 分。Flash 已验证后训练的巨大威力——Pro 正式版大概率<strong>直接对标 Opus 5、Fable 5、GPT-5.6</strong>。好戏还在后面。
+        </p>
+      </div>
+
+      <div style="margin-top: 8px;">
+        <div class="c-tag-strip">
+          <span class="c-tag">后训练</span>
+          <span class="c-tag">Post-training</span>
+          <span class="c-tag">DeepSeek</span>
+          <span class="c-tag">AI 工具</span>
+          <span class="c-tag">开源模型</span>
+          <span class="c-tag">RLHF</span>
+        </div>
+      </div>
+
+      <div class="c-cta">
+        <strong>关注我，AI 落地，眼见为实～</strong>
+        <div class="tagline">听过，比学会更重要。</div>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span></span><span></span><span></span><span class="active"></span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
