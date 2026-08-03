@@ -1,4 +1,21 @@
 {
+  "name": "spark-note",
+  "version": "0.1.0",
+  "private": true,
+  "description": "spark-note — 小红书内容运营智能体 web 端（对话 / 内容管理 / Writing DNA）",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm run --parallel dev",
+    "dev:server": "pnpm --filter @spark-note/server dev",
+    "dev:client": "pnpm --filter @spark-note/client dev",
+    "build": "pnpm run --parallel build",
+    "build:server": "pnpm --filter @spark-note/server build",
+    "build:client": "pnpm --filter @spark-note/client build",
+    "start": "pnpm --filter @spark-note/server start",
+    "preview": "pnpm run build && pnpm --filter @spark-note/server start"
+  },
   "dependencies": {
     "playwright": "^1.62.1"
   }
