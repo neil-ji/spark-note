@@ -1,5 +1,7 @@
 packages:
   - 'packages/*'
 allowBuilds:
+  '@google/genai': true
   esbuild: true
   playwright: true
+  protobufjs: true
