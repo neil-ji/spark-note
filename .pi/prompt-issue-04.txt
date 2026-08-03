@@ -1,0 +1,26 @@
+调用 tingguo-weekly SKILL，产出《听过》第四期完整周刊。严格要求按序执行，禁止跳过任何步骤、禁止 mock。
+
+第一步 读取规范：
+1. 用 read 读取 .claude/skills/tingguo-weekly/SKILL.md，严格遵循其中流水线、文稿格式、HTML 组件与自检清单。
+2. 用 read 读取 .claude/writing-dna/Writing-DNA.md 及同一目录下四份分文档，写作遵守 Writing-DNA 核心规则（清单体分号收尾、零寒暄、不用「你」、中英混排、收尾三选一等）。
+
+第二步 选题与目录：
+- 本期：《听过第四期》，标题「RAG 是什么：AI 如何读懂你的文件」（20 字以内）。
+- 新建目录 content/听过/2026-08-03-issue-04/。
+
+第三步 撰写文稿（第一产物，手工编写，非 Markdown）：
+- 保存为 content/听过/2026-08-03-issue-04/manuscript.txt。
+- 严格按 SKILL.md Step 2 格式：[标题] + [正文 900 字以内连续段落] + [结尾 CTA] + [话题标签]。
+- 写完后对照 SKILL.md 自检清单逐项检查，不通过就修改。
+
+第四步 生成品牌 HTML：
+- 保存为 content/听过/2026-08-03-issue-04/index.html，通过 <link rel="stylesheet" href="../brand.css"> 引用共享样式。
+- 5 张卡：封面（结构按 SKILL.md 3.3 封面硬规则）+ 4 张内容页（组件从 brand.css 目录选配，每页 2–4 个组件，brand/teal 交替）。第二期 index.html（content/听过/2026-07-26-issue-02/index.html）是完整参考实现，可对照。
+
+第五步 生成 PNG 截图：
+- 在仓库根目录运行：node .claude/skills/tingguo-weekly/tools/screenshot.mjs content/听过/2026-08-03-issue-04/index.html content/听过/2026-08-03-issue-04/pngs
+- 截图脚本已适配本地 playwright，无需安装。
+
+第六步 验收自检：
+- 确认 content/听过/2026-08-03-issue-04/ 下 6 个交付物齐全：manuscript.txt、index.html、pngs/cover.png、pngs/card-02.png ~ card-05.png、pngs/full.png。
+- 确认 manuscript.txt 非空、PNG 文件非空。逐项汇报。
