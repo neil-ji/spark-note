@@ -1,0 +1,16 @@
+{
+  "name": "spike-pi-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Spike: verify pi Embed SDK minimal runnable + WebSocket streaming",
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.83.0",
+    "ws": "8.21.1"
+  },
+  "scripts": {
+    "verify:auth": "node verify-auth.mjs",
+    "verify:streaming": "node verify-streaming.mjs",
+    "verify:websocket": "node verify-websocket.mjs"
+  }
+}
