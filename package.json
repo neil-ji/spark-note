@@ -17,6 +17,7 @@
     "preview": "pnpm run build && pnpm --filter @spark-note/server start"
   },
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.83.0",
     "playwright": "^1.62.1"
   }
 }

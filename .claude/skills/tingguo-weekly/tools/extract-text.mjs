@@ -22,7 +22,7 @@ import { resolve } from 'path';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// ── Auto-resolve playwright from pnpm store ──
+// ── Resolve playwright: local node_modules first, then pnpm store fallback ──
 function findPlaywrightMjs() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   let dir = resolve(__dirname);
@@ -37,11 +37,28 @@ function findPlaywrightMjs() {
     }
     dir = path.dirname(dir);
   }
-  throw new Error('playwright not found. Run "pnpm install" from spark-hub root.');
+  throw new Error('playwright not found. Run "npm install playwright" from the project root (or "pnpm install" from spark-hub root).');
 }
 
-const playwrightPath = findPlaywrightMjs();
-const { chromium } = await import(playwrightPath);
+let chromium;
+try {
+  // Local node_modules (standalone install) — resolves relative to cwd
+  ({ chromium } = await import('playwright'));
+} catch {
+  const playwrightPath = findPlaywrightMjs();
+  ({ chromium } = await import(playwrightPath));
+}
+
+// Launch chromium. In macOS Seatbelt-sandboxed shells the default launch fails
+// on Mach-port rendezvous; --single-process --no-zygote works. Try default first.
+async function launchChromium() {
+  try {
+    return await chromium.launch();
+  } catch (err) {
+    console.error(`Default chromium launch failed (${err.message.split('\n')[0]}), retrying with --single-process --no-zygote`);
+    return await chromium.launch({ args: ['--single-process', '--no-zygote'] });
+  }
+}
 
 // ── UI chrome selectors to EXCLUDE from text extraction ──
 const CHROME_SELECTORS = [
@@ -78,7 +95,7 @@ async function main() {
     process.exit(1);
   }
 
-  const browser = await chromium.launch();
+  const browser = await launchChromium();
   const page = await browser.newPage();
   await page.setViewportSize({ width: 820, height: 600 });
   await page.goto(`file://${absHtml}`, { waitUntil: 'networkidle' });
