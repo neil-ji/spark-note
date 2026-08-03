@@ -5,6 +5,7 @@ import cors from '@fastify/cors';
 import staticPlugin from '@fastify/static';
 import { CLIENT_DIST, HOST, SERVER_PORT } from './config.js';
 import { registerWebSocket, wsHub } from './ws.js';
+import { registerWritingDnaRoutes } from './writing-dna.js';
 
 /** 组装 Fastify 实例：健康检查 API、WebSocket 基础设施、前端静态资源托管。 */
 export async function buildServer(): Promise<FastifyInstance> {
@@ -22,6 +23,9 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // WebSocket 服务基础设施（/ws）
   await registerWebSocket(app);
+
+  // Writing DNA 文档 API（/api/writing-dna）
+  await registerWritingDnaRoutes(app);
 
   // 静态资源服务：托管前端 build 产物（packages/client/dist）。
   // dev 模式下由 Vite dev server 提供页面；仅 build 后 dist 存在时才注册。
