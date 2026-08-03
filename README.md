@@ -13,9 +13,10 @@
 ```
 packages/
   server/    # Fastify 后端
-    src/index.ts      # 服务组装：/api/health、/ws、静态托管（含 SPA 回退）
-    src/ws.ts         # WebSocket 连接集线器（send/broadcast/计数）
-    src/config.ts     # 端口与环境配置
+    src/index.ts       # 服务组装：/api/health、/ws、/api/writing-dna、静态托管（含 SPA 回退）
+    src/ws.ts          # WebSocket 连接集线器（send/broadcast/计数）
+    src/writing-dna.ts # Writing DNA 文档 API（读取 .claude/writing-dna/ + 核心规则解析）
+    src/config.ts      # 端口与环境配置
   client/    # React 前端
     src/App.tsx       # react-router 路由（对话 / 内容管理 / Writing DNA）
     src/components/   # Layout、HealthBadge（顶栏健康检查指示器）
@@ -57,6 +58,6 @@ pnpm preview  # build 后启动生产模式（一键启动）
 - [x] WebSocket 基础设施 `GET /ws`（ping / echo / broadcast）
 - [x] 三个路由页面 + 顶栏健康指示器
 - [x] 前端静态资源托管 + SPA 回退
+- [x] Writing DNA：`GET /api/writing-dna`（读取 .claude/writing-dna/ 全部分档）+ 结构化渲染（分篇/标题层级/代码块）+ 10 条核心规则自检清单
 - [ ] 对话：pi agent 会话流式事件推送（接入 `@earendil-works/pi-coding-agent`）
 - [ ] 内容管理：content/ 列表、归档、新增
-- [ ] Writing DNA：.claude/writing-dna 结构化渲染

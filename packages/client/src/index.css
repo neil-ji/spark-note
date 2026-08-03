@@ -9,3 +9,74 @@
 body {
   @apply bg-neutral-50 text-neutral-900 antialiased;
 }
+
+/* Writing DNA 文档结构化渲染排版（见 src/lib/markdown.tsx） */
+.dna-prose {
+  @apply text-sm leading-7 text-neutral-800;
+}
+.dna-prose > *:first-child {
+  @apply mt-0;
+}
+.dna-prose > *:last-child {
+  @apply mb-0;
+}
+.dna-prose h1,
+.dna-prose h2,
+.dna-prose h3,
+.dna-prose h4 {
+  @apply scroll-mt-6 font-semibold text-neutral-900;
+}
+.dna-prose h1 {
+  @apply mb-3 mt-2 text-xl leading-8;
+}
+.dna-prose h2 {
+  @apply mb-2 mt-7 border-b border-neutral-200 pb-1 text-base leading-7;
+}
+.dna-prose h3 {
+  @apply mb-1.5 mt-5 text-sm;
+}
+.dna-prose h4 {
+  @apply mb-1 mt-4 text-[13px];
+}
+.dna-prose p {
+  @apply my-2.5;
+}
+.dna-prose ul.dna-ul,
+.dna-prose ol.dna-ol {
+  @apply my-2.5 space-y-1 pl-5;
+}
+.dna-prose ul.dna-ul {
+  @apply list-disc;
+}
+.dna-prose ol.dna-ol {
+  @apply list-decimal;
+}
+.dna-prose li > ul,
+.dna-prose li > ol {
+  @apply my-1.5;
+}
+.dna-prose blockquote {
+  @apply my-3 border-l-[3px] border-neutral-300 bg-neutral-100/80 px-3 py-2 text-[13px] leading-6 text-neutral-600;
+}
+.dna-prose code {
+  @apply rounded bg-neutral-100 px-1 py-0.5 font-mono text-[0.85em] text-neutral-800;
+}
+.dna-prose pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+.dna-prose a {
+  @apply text-teal-700 underline underline-offset-2 hover:text-teal-800;
+}
+.dna-prose hr {
+  @apply my-6 border-neutral-200;
+}
+.dna-prose table {
+  @apply my-3 w-full border-collapse text-[13px] leading-6;
+}
+.dna-prose th,
+.dna-prose td {
+  @apply border border-neutral-200 px-2 py-1 text-left align-top;
+}
+.dna-prose th {
+  @apply bg-neutral-50 font-semibold text-neutral-900;
+}

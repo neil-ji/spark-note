@@ -16,5 +16,11 @@ export const HOST = process.env.HOST ?? '127.0.0.1';
 
 /** 前端 build 产物目录（生产模式静态托管用）。默认 packages/client/dist。 */
 const serverSrcDir = path.dirname(fileURLToPath(import.meta.url));
+
+/** 仓库根目录（config.ts 位于 packages/server/src/，向上三级）。 */
+const repoRoot = path.resolve(serverSrcDir, '../../..');
 export const CLIENT_DIST =
   process.env.CLIENT_DIST ?? path.resolve(serverSrcDir, '../../client/dist');
+
+/** Writing DNA 文档目录。默认仓库根下 .claude/writing-dna（spark-note 的只读数据源）。 */
+export const DNA_DIR = process.env.DNA_DIR ?? path.join(repoRoot, '.claude', 'writing-dna');
