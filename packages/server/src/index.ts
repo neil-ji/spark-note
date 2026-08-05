@@ -6,6 +6,7 @@ import staticPlugin from '@fastify/static';
 import { CLIENT_DIST, HOST, SERVER_PORT } from './config.js';
 import { registerWebSocket, wsHub } from './ws.js';
 import { registerWritingDnaRoutes } from './routes/writing-dna.js';
+import { getAgentRuntime } from './agent.js';
 
 /** 组装 Fastify 实例：健康检查 API、WebSocket 基础设施、Writing DNA 数据 API、前端静态资源托管。 */
 export async function buildServer(): Promise<FastifyInstance> {
@@ -48,6 +49,9 @@ export async function buildServer(): Promise<FastifyInstance> {
 async function main(): Promise<void> {
   const app = await buildServer();
   try {
+    // 预热 pi agent 运行时（加载模型 + SKILL），配置错误提前暴露。
+    // 失败不阻塞启动：getAgentRuntime 会清空缓存，首个 chat 消息触发重试。
+    getAgentRuntime().catch((err) => app.log.warn({ err }, 'agent runtime warm-up failed'));
     await app.listen({ port: SERVER_PORT, host: HOST });
   } catch (err) {
     app.log.error(err);
