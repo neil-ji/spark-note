@@ -13,12 +13,16 @@ import { REPO_ROOT, SESSION_DIR } from './repo-paths.js';
 import { getEffectiveConfig } from './provider-config.js';
 
 /**
- * pi Agent 会话运行时（单用户）。
+ * pi Agent 会话运行时（单用户，多会话）。
  *
  * 复用 spike（`.pi/run-tingguo-weekly.mjs` + `spike-pi-sdk/verify-streaming.mjs`）的
  * session 封装模式：ModelRuntime(models 覆盖) + DefaultResourceLoader(.claude/skills 合并)
- * + SessionManager.continueRecent(REPO_ROOT, .pi/sessions/) + createAgentSession。
+ * + SessionManager + createAgentSession。
  * 真实 pi SDK 会话（JSONL 落盘），禁止 mock。
+ *
+ * 多会话语义：按 conversationId 缓存独立 AgentRuntime（runtimes Map），每个会话持有独立
+ * SessionManager（JSONL 互不干扰）；open 恢复历史对话、continueRecent 缺省（最近或新建）、
+ * create 建新。sendPrompt / abort / 状态快照均可指定会话，缺省指向当前活跃会话。
  *
  * 模型与凭据（env > .pi/config.json > 代码默认值；禁止把第三方中转域名硬编码进仓库/文档）：
  *   ANTHROPIC_BASE_URL   anthropic 端点。未设置 → 回退官方语义 https://api.anthropic.com。
@@ -155,14 +159,28 @@ class Fanout<T> {
   }
 }
 
-/** 归一化 agent 事件流。 */
-export const agentEvents = new Fanout<AgentWsEvent>();
-/** 会话状态快照（idle/streaming/error + 模型/skills 元信息）。 */
-export const sessionStates = new Fanout<AgentStateSnapshot>();
+/** 归一化 agent 事件（携带所属会话 id，供 WS 层按会话路由/过滤）。 */
+export interface ConversationAgentEvent {
+  conversationId: string;
+  event: AgentWsEvent;
+}
 
-/* ── AgentRuntime 单例（单用户，懒创建 + 失败可重试）── */
+/** 会话状态快照（携带所属会话 id）。 */
+export interface ConversationStateSnapshot {
+  conversationId: string;
+  state: AgentStateSnapshot;
+}
+
+/** 归一化 agent 事件流（携带 conversationId）。 */
+export const agentEvents = new Fanout<ConversationAgentEvent>();
+/** 会话状态快照（idle/streaming/error + 模型/skills 元信息，携带 conversationId）。 */
+export const sessionStates = new Fanout<ConversationStateSnapshot>();
+
+/* ── 会话运行时（单用户，按 conversationId 缓存独立 AgentRuntime）── */
 
 export interface AgentRuntime {
+  /** 该运行时绑定的会话 id（会话 JSONL 的 header id）。 */
+  readonly conversationId: string;
   readonly session: AgentSession;
   readonly modelId: string;
   readonly thinkingLevel: string;
@@ -182,9 +200,27 @@ function resolveAnthropicApiKey(): string | undefined {
 /** createAgentSession 的 thinkingLevel 参数类型（不直接依赖 pi-agent-core）。 */
 type SessionThinkingLevel = NonNullable<Parameters<typeof createAgentSession>[0]>['thinkingLevel'];
 
-let runtimePromise: Promise<AgentRuntime> | undefined;
+/** 会话运行时缓存：conversationId → AgentRuntime（每个会话独立 pi AgentSession + ModelRuntime，JSONL 互不干扰）。 */
+const runtimes = new Map<string, Promise<AgentRuntime>>();
+/** 当前活跃会话 id（最后一次 sendPrompt 的会话；abort/snapshot 缺省目标）。 */
+let activeConversationId: string | null = null;
+/** 无任何历史会话时新建缺省会话的防并发重复创建守卫。 */
+let defaultRuntimePromise: Promise<AgentRuntime> | undefined;
 
-async function createRuntime(): Promise<AgentRuntime> {
+/**
+ * 按 conversationId 打开目标 JSONL 会话（真实 pi SessionManager.open）；
+ * 会话不存在抛错（不隐式新建）。
+ */
+async function openSessionManager(conversationId: string): Promise<SessionManager> {
+  const sessions = await SessionManager.list(REPO_ROOT, SESSION_DIR); // 按 modified 倒序
+  const info = sessions.find((s) => s.id === conversationId);
+  if (!info) {
+    throw new Error(`会话不存在: ${conversationId}`);
+  }
+  return SessionManager.open(info.path, SESSION_DIR);
+}
+
+async function createRuntime(targetConversationId?: string): Promise<{ runtime: AgentRuntime; conversationId: string }> {
   // 0. 生效配置：env > .pi/config.json > 代码默认值（见 provider-config.ts）。
   const cfg = await getEffectiveConfig();
 
@@ -239,17 +275,23 @@ async function createRuntime(): Promise<AgentRuntime> {
   });
   await loader.reload();
 
-  // 4. 会话 —— 持久化 JSONL（.pi/sessions/）。continueRecent 语义：无会话时新建，
-  //    重启后恢复最近会话（等价于"create 新建 + continueRecent 恢复"的组合）。
+  // 4. 会话 —— 持久化 JSONL（.pi/sessions/）。
+  //    目标 conversationId 明确时打开对应 JSONL（真实恢复历史对话）；缺省 continueRecent
+  //    （无会话时新建，重启后恢复最近会话）。每个会话持有独立 SessionManager，互不干扰。
+  const sessionManager = targetConversationId
+    ? await openSessionManager(targetConversationId)
+    : SessionManager.continueRecent(REPO_ROOT, SESSION_DIR);
+
   const { session } = await createAgentSession({
     cwd: REPO_ROOT,
     modelRuntime,
     model,
     thinkingLevel: cfg.thinkingLevel as SessionThinkingLevel,
     resourceLoader: loader,
-    sessionManager: SessionManager.continueRecent(REPO_ROOT, SESSION_DIR),
+    sessionManager,
   });
 
+  const conversationId = session.sessionManager.getSessionId();
   const skills = loader.getSkills().skills.map((s) => s.name);
   const state: AgentStateSnapshot = {
     status: 'idle',
@@ -258,21 +300,22 @@ async function createRuntime(): Promise<AgentRuntime> {
     skills,
   };
 
-  // 4. 订阅事件 → 归一化扇出 + 会话状态切换。
+  // 5. 订阅事件 → 带 conversationId 归一化扇出 + 会话状态切换。
   session.subscribe((event) => {
     const normalized = normalizeAgentEvent(event);
-    if (normalized) agentEvents.emit(normalized);
+    if (normalized) agentEvents.emit({ conversationId, event: normalized });
     if (event.type === 'agent_start') {
-      sessionStates.emit({ ...state, status: 'streaming' });
+      sessionStates.emit({ conversationId, state: { ...state, status: 'streaming' } });
     } else if (event.type === 'agent_settled') {
-      sessionStates.emit({ ...state, status: 'idle' });
+      sessionStates.emit({ conversationId, state: { ...state, status: 'idle' } });
     }
   });
 
   // 运行时就绪：下发完整快照（模型 / skills）。
-  sessionStates.emit(state);
+  sessionStates.emit({ conversationId, state });
 
-  return {
+  const runtime: AgentRuntime = {
+    conversationId,
     session,
     modelId: model.id,
     thinkingLevel: cfg.thinkingLevel,
@@ -280,38 +323,86 @@ async function createRuntime(): Promise<AgentRuntime> {
     tools: session.getActiveToolNames(),
     dispose: () => session.dispose(),
   };
+  return { runtime, conversationId };
 }
 
-/** 获取（或创建）AgentRuntime 单例；创建失败时清空缓存，下次调用可重试。 */
-export function getAgentRuntime(): Promise<AgentRuntime> {
-  if (!runtimePromise) {
-    runtimePromise = createRuntime().catch((err: unknown) => {
-      runtimePromise = undefined;
-      throw err;
+/**
+ * 解析缺省会话 id：会话目录中最近修改的会话（SessionManager.list 按 modified 倒序）。
+ * 无任何历史会话返回 undefined（由调用方决定新建）。
+ */
+export async function resolveDefaultConversationId(): Promise<string | undefined> {
+  const sessions = await SessionManager.list(REPO_ROOT, SESSION_DIR);
+  return sessions[0]?.id;
+}
+
+/** 按 conversationId 取（或创建）运行时并缓存；创建失败清缓存，下次可重试。 */
+function getCachedOrCreateRuntime(conversationId: string): Promise<AgentRuntime> {
+  const cached = runtimes.get(conversationId);
+  if (cached) return cached;
+  const promise = createRuntime(conversationId).then(({ runtime, conversationId: resolved }) => {
+    activeConversationId = resolved;
+    return runtime;
+  });
+  promise.catch(() => {
+    if (runtimes.get(conversationId) === promise) runtimes.delete(conversationId);
+  });
+  runtimes.set(conversationId, promise);
+  return promise;
+}
+
+/** 无任何历史会话时新建缺省会话（幂等守卫，防并发重复创建）。 */
+function getOrCreateDefaultRuntime(): Promise<AgentRuntime> {
+  if (!defaultRuntimePromise) {
+    defaultRuntimePromise = createRuntime(undefined).then(({ runtime, conversationId }) => {
+      runtimes.set(conversationId, Promise.resolve(runtime));
+      activeConversationId = conversationId;
+      return runtime;
+    });
+    defaultRuntimePromise.catch(() => {
+      defaultRuntimePromise = undefined;
     });
   }
-  return runtimePromise;
+  return defaultRuntimePromise;
 }
 
-/** 发送一条用户消息。流式期间自动 followUp 排队，空闲则直接运行。 */
-export async function sendPrompt(text: string): Promise<void> {
-  const runtime = await getAgentRuntime();
+/**
+ * 获取（或创建）指定会话的运行时。
+ * - conversationId 显式给定 → 打开该历史会话（不存在抛错）
+ * - 缺省 → 最近会话（每次重新解析，跟随新建会话）；无任何历史会话 → 新建默认会话
+ */
+export function getAgentRuntime(conversationId?: string): Promise<AgentRuntime> {
+  if (conversationId) return getCachedOrCreateRuntime(conversationId);
+  return resolveDefaultConversationId().then((id) =>
+    id ? getCachedOrCreateRuntime(id) : getOrCreateDefaultRuntime(),
+  );
+}
+
+/** 发送一条用户消息到指定会话（缺省最近会话/新建）。流式期间自动 followUp 排队，空闲则直接运行。 */
+export async function sendPrompt(text: string, conversationId?: string): Promise<void> {
+  const runtime = await getAgentRuntime(conversationId);
+  activeConversationId = runtime.conversationId;
   const opts = runtime.session.isStreaming ? { streamingBehavior: 'followUp' as const } : undefined;
   await runtime.session.prompt(text, opts);
 }
 
-/** 中断当前 agent 运行（空闲时为空操作）。 */
-export async function abortRun(): Promise<void> {
-  const runtime = await getAgentRuntime();
+/** 中断指定会话（缺省当前活跃会话）的 agent 运行（空闲时为空操作）。 */
+export async function abortRun(conversationId?: string): Promise<void> {
+  const id = conversationId ?? activeConversationId;
+  if (!id) return;
+  const runtime = await getAgentRuntime(id);
   if (runtime.session.isStreaming) {
     await runtime.session.abort();
   }
 }
 
-/** 当前会话状态快照（连接时下发；不触发运行时创建）。 */
-export async function getSessionSnapshot(): Promise<AgentStateSnapshot> {
+/**
+ * 指定会话状态快照（缺省当前活跃会话；连接时下发，不触发运行时创建）。
+ * 运行时未创建 → initializing（保持 agent.test.ts 无参行为）。
+ */
+export async function getSessionSnapshot(conversationId?: string): Promise<AgentStateSnapshot> {
   const cfg = await getEffectiveConfig();
-  const pending = runtimePromise;
+  const id = conversationId ?? activeConversationId ?? undefined;
+  const pending = id ? runtimes.get(id) : undefined;
   if (!pending) {
     return { status: 'initializing', model: cfg.modelId, thinkingLevel: cfg.thinkingLevel, skills: [] };
   }
