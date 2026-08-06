@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>听过 · 第四期 — Token 与上下文窗口：AI 的「记忆力」</title>
+  <link rel="stylesheet" href="../brand.css">
+</head>
+<body>
+<div class="deck">
+
+  <!-- ═══════════════════════════════════════
+       PAGE 1 — COVER
+       ═══════════════════════════════════════ -->
+  <div class="card cover">
+    <div class="cover-blob cover-blob--a"></div>
+    <div class="cover-blob cover-blob--b"></div>
+
+    <div class="weekly-badge"><span class="wb-dot"></span>每周更新</div>
+
+    <div class="cover-content">
+      <div class="cover-issue">第 四 期 · 2026.08.06</div>
+      <div class="cover-wordmark">听过</div>
+      <div class="cover-rule"></div>
+      <h1>Token 与上下文窗口：<em>AI 的「记忆力」</em></h1>
+      <p class="cover-sub">
+        介于严肃原理与轻松科普之间<br>
+        你可以不深究其理，但应当「听过」
+      </p>
+      <div class="cover-meta">
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>约 5 分钟</span>
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/><line x1="12" y1="22" x2="12" y2="15.5"/><polyline points="22 8.5 12 15.5 2 8.5"/></svg>原创思考</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 2 — Token 与上下文窗口定义
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="weekly-badge"><span class="wb-dot"></span>听过 · 第四期</div>
+
+    <div class="page-series-marker">核心概念</div>
+
+    <div class="page-header">
+      <div class="page-kicker page-kicker--brand">
+        <span class="kicker-dot kicker-dot--brand"></span>定义
+      </div>
+      <h2>AI 的「记忆力」：<br>由两个数字决定</h2>
+      <div class="sub">Token 是单位，上下文窗口是容量</div>
+    </div>
+
+    <div class="page-body">
+      <div class="c-insight c-insight--brand">
+        <div class="c-insight-label c-insight-label--brand">Token</div>
+        <p>
+          AI 读文本的<strong>最小单位</strong>，就是把一句话切碎成的小块。英文里一个单词约等于一个 token，
+          中文一个字约一到两个 token。粗略估算，100 个英文 token 大约对应 75 个单词。
+        </p>
+      </div>
+
+      <div class="c-insight c-insight--teal">
+        <div class="c-insight-label c-insight-label--teal">上下文窗口 Context Window</div>
+        <p>
+          AI 一次能<strong>「同时看到」的 token 总数</strong>，也就是单次对话里眼前能摊开的所有内容。
+          窗口以内的看得到、能引用；窗口以外的——哪怕五分钟前刚聊过——一概不记得。
+        </p>
+      </div>
+
+      <div class="c-hl">
+        <p>
+          <em>Token 是 AI 认识世界的「字」。</em>
+          上下文窗口是 AI 一次能摆在桌上的「字」的总数——窗口的大小，就是它工作记忆的大小。
+        </p>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span class="active"></span><span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 3 — 书桌 vs 图书馆 + 窗口数据
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="weekly-badge"><span class="wb-dot"></span>听过 · 第四期</div>
+
+    <div class="page-series-marker">眼见为实</div>
+
+    <div class="page-header">
+      <div class="page-kicker page-kicker--teal">
+        <span class="kicker-dot kicker-dot--teal"></span>类比
+      </div>
+      <h2>上下文窗口是书桌，<br>RAG 是图书馆</h2>
+      <div class="sub">查回来的资料，必须摊到桌上才看得到</div>
+    </div>
+
+    <div class="page-body">
+      <div class="c-compare">
+        <div class="c-compare-col">
+          <h3><span class="d" style="background:var(--teal)"></span> 上下文窗口</h3>
+          <p>
+            像一张<strong>书桌</strong>。AI 工作时的「眼前」，能摊开的资料就这么多。<br><br>
+            书桌就这么大，一次摊开的<strong>有限</strong>。
+          </p>
+        </div>
+        <div class="c-compare-div"></div>
+        <div class="c-compare-col">
+          <h3><span class="d" style="background:var(--brand)"></span> RAG</h3>
+          <p>
+            像一座<strong>图书馆</strong>。第一期讲过，RAG 让 AI 学会临时去查资料。<br><br>
+            但查回来的内容，必须<strong>搬上书桌</strong>（塞进窗口），AI 才用得动。
+          </p>
+        </div>
+      </div>
+
+      <div class="c-finding">
+        <div class="c-finding-icon c-finding-icon--brand">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="c-finding-text">
+          <strong>窗口大小，决定 AI 一次能读多厚的材料。</strong><br>
+          Claude 的窗口做到 1M token，约 75 万英文单词，可一次读完《三体》三部曲；常见模型是 128K 左右，大概一本几百页的书。
+        </div>
+      </div>
+
+      <div class="c-hl c-hl--t">
+        <p>
+          <em>书桌就这么大，一次摊开的有限。</em>
+          想读更多，要么换更大的桌子，要么像 RAG 一样——按需去查，查完用完就收。
+        </p>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span></span><span class="active"></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 4 — token 计价 + 实用提醒
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="weekly-badge"><span class="wb-dot"></span>听过 · 第四期</div>
+
+    <div class="page-series-marker">实用提醒</div>
+
+    <div class="page-header">
+      <div class="page-kicker page-kicker--brand">
+        <span class="kicker-dot kicker-dot--brand"></span>计价与提醒
+      </div>
+      <h2>窗口越大越贵，<br>聊得越长越容易「忘」</h2>
+    </div>
+
+    <div class="page-body">
+      <div class="c-insight c-insight--brand">
+        <div class="c-insight-label c-insight-label--brand">显然</div>
+        <p>
+          token 同时是 AI 的<strong>计价单位</strong>。API 按输入输出 token 收费，
+          窗口每多塞一个字，成本就多一分；从 128K 涨到 1M，单次调用成本能差好几倍。
+        </p>
+      </div>
+
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--brand"></span>
+        <span>长对话靠把整段历史塞进窗口维持「记忆」——聊得越长窗口越满，<strong>越容易在细节上犯错</strong>；重要内容放回对话末尾，或直接开新对话</span>
+      </div>
+      <div class="c-bullet-row">
+        <span class="c-bullet c-bullet--teal"></span>
+        <span>遇到「AI 忘了之前的结论」，多半不是它蠢，而是<strong>内容已超出窗口</strong></span>
+      </div>
+
+      <div class="c-formula">
+        <span class="term term--t">历史对话</span>
+        <span class="op">→</span>
+        <span class="term term--t">塞满窗口</span>
+        <span class="op">→</span>
+        <span class="term term--t">超出部分</span>
+        <span class="op">→</span>
+        <span class="result">彻底遗忘</span>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span></span><span></span><span class="active"></span><span></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PAGE 5 — 听过 + Takeaways
+       ═══════════════════════════════════════ -->
+  <div class="card">
+    <div class="weekly-badge"><span class="wb-dot"></span>听过 · 第四期</div>
+
+    <div class="page-series-marker">小结</div>
+
+    <div class="page-header">
+      <h2>你可以不精通，<br>但应当「听过」</h2>
+    </div>
+
+    <div class="page-body">
+      <div class="c-takeaway" style="border-left: 3px solid var(--brand);">
+        <span class="c-takeaway-num c-takeaway-num--1">1</span>
+        <h3>窗口是工作记忆，不是长期记忆</h3>
+        <p>
+          Token 是单位，上下文窗口是容量。窗口以内看得到、能引用，窗口以外一概不记得。
+          技术圈每年在卷窗口，从 4K 卷到 1M——但<strong>本质没变</strong>：它只是一次性摊开的书桌，不是书架。
+        </p>
+      </div>
+
+      <div class="c-takeaway" style="border-left: 3px solid var(--teal); margin-top:16px;">
+        <span class="c-takeaway-num c-takeaway-num--2">2</span>
+        <h3>RAG 负责长期，窗口负责当下</h3>
+        <p>
+          真正长久的记忆，靠的是 RAG 那套——<strong>查资料，而不是背下来</strong>。
+          书桌有限没关系，学会随时去图书馆搬，用完就收。
+        </p>
+      </div>
+
+      <div class="c-takeaway" style="border-left: 3px solid #c9a87c; margin-top:16px;">
+        <span class="c-takeaway-num c-takeaway-num--3">3</span>
+        <h3>「忘」了不怪 AI，怪窗口</h3>
+        <p>
+          长对话容易在细节上犯错，是窗口被历史塞满的必然结果。重要信息放回对话末尾，或直接开新对话——
+          给 AI 换张<strong>干净的桌子</strong>，比什么都管用。
+        </p>
+      </div>
+
+      <div style="margin-top: 8px;">
+        <div class="c-tag-strip">
+          <span class="c-tag">Token</span>
+          <span class="c-tag">上下文窗口</span>
+          <span class="c-tag">Context Window</span>
+          <span class="c-tag">RAG</span>
+          <span class="c-tag">AI 科普</span>
+          <span class="c-tag">听过系列</span>
+        </div>
+      </div>
+
+      <div class="c-cta">
+        <strong>关注我，AI 落地，眼见为实～</strong>
+        <div class="tagline">听过，比学会更重要。</div>
+      </div>
+    </div>
+
+    <div class="page-footer-dots">
+      <span></span><span></span><span></span><span></span><span class="active"></span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
