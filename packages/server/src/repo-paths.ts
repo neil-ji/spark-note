@@ -32,3 +32,6 @@ export const REPO_ROOT = findRepoRoot(moduleDir);
 /** Writing DNA 文档目录（.claude/writing-dna/），可用 WRITING_DNA_DIR 覆盖（测试/部署用）。 */
 export const WRITING_DNA_DIR =
   process.env.WRITING_DNA_DIR ?? path.join(REPO_ROOT, '.claude', 'writing-dna');
+
+/** 对话会话目录（.pi/sessions/，JSONL 落盘），可用 PI_SESSION_DIR 覆盖（测试/部署用）。 */
+export const SESSION_DIR = process.env.PI_SESSION_DIR ?? path.join(REPO_ROOT, '.pi', 'sessions');
