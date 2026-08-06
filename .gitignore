@@ -6,4 +6,5 @@ dist/
 .env
 .env.local
 .env.*.local
+.pi/secrets.env
 .DS_Store
