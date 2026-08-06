@@ -9,6 +9,7 @@ import {
   type Conversation,
 } from '../lib/api';
 import type { ChatItem, ToolCallItem } from '../lib/chat';
+import { Markdown } from '../lib/markdown';
 import ConversationSidebar from '../components/ConversationSidebar';
 
 /**
@@ -94,6 +95,8 @@ const TypewriterCursor = forwardRef<HTMLSpanElement>(function TypewriterCursor(_
 function MessageBubble({ item }: { item: ChatItem }) {
   // 打字机式流式浮现：仅实时流式的助手消息有逐字 reveal + 块状光标；
   // 历史回显 / 已完成的用户与助手消息（含 abort 后）直接全文停驻、无光标。
+  // 助手消息的 display 是 markdown 源文本的 reveal 进度，渲染层按该进度渲染富文本
+  // （lib/markdown.tsx 的 parseBlocks 对未闭合围栏/粗体等增量输入容错，不会抛错）。
   const typewriting = item.role === 'assistant' && item.status === 'streaming';
   const { display, showCursor } = useTypewriter(item.text, typewriting);
   const cursorRef = useRef<HTMLSpanElement>(null);
@@ -134,10 +137,11 @@ function MessageBubble({ item }: { item: ChatItem }) {
         ))}
 
         {item.text && (
-          <p className="whitespace-pre-wrap">
-            {display}
+          <>
+            {/* 助手文本按 reveal 进度渲染为流式安全的富文本（.dna-prose 沿用 Writing DNA 排版体系） */}
+            <Markdown markdown={display} className="dna-prose" />
             {showCursor && <TypewriterCursor ref={cursorRef} />}
-          </p>
+          </>
         )}
 
         {item.status === 'streaming' && !item.text && (
