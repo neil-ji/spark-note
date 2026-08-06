@@ -72,3 +72,27 @@ export async function getWritingDna(slug: string): Promise<{ doc: DnaDocDetail }
   }
   return (await res.json()) as { doc: DnaDocDetail };
 }
+
+/* ---- 内容管理数据 API ---- */
+
+/** 单期元信息（字段与 packages/server 的 ContentIssueMeta 保持一致）。 */
+export interface ContentIssue {
+  name: string;
+  number: number;
+  date: string;
+  title: string | null;
+  manuscript: string | null;
+  hasHtml: boolean;
+  htmlUrl: string | null;
+  pngs: string[];
+  pngUrls: string[];
+}
+
+/** 列出《听过》各期内容元信息（文稿 / HTML / PNG 均只读）。 */
+export async function listContentIssues(): Promise<{ issues: ContentIssue[] }> {
+  const res = await fetch('/api/content/issues');
+  if (!res.ok) {
+    throw new Error(`list content issues failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as { issues: ContentIssue[] };
+}
