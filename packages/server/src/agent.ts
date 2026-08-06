@@ -10,6 +10,7 @@ import {
   type AgentSessionEvent,
 } from '@earendil-works/pi-coding-agent';
 import { REPO_ROOT } from './repo-paths.js';
+import { getEffectiveConfig } from './provider-config.js';
 
 /**
  * pi Agent 会话运行时（单用户）。
@@ -18,7 +19,7 @@ import { REPO_ROOT } from './repo-paths.js';
  * session 封装模式：ModelRuntime(models 覆盖) + DefaultResourceLoader(.claude/skills 合并)
  * + SessionManager.inMemory() + createAgentSession。真实 pi SDK 会话，禁止 mock。
  *
- * 模型与凭据（环境变量驱动；禁止把第三方中转域名硬编码进仓库/文档）：
+ * 模型与凭据（env > .pi/config.json > 代码默认值；禁止把第三方中转域名硬编码进仓库/文档）：
  *   ANTHROPIC_BASE_URL   anthropic 端点。未设置 → 回退官方语义 https://api.anthropic.com。
  *   ANTHROPIC_API_KEY    api key（SDK 发 x-api-key 头；优先注入）
  *   ANTHROPIC_AUTH_TOKEN bearer token（SDK 发 Authorization: Bearer 头；无 API_KEY 时由 SDK 原生兜底）
@@ -26,9 +27,11 @@ import { REPO_ROOT } from './repo-paths.js';
  *   PI_THINKING          thinking 级别（默认 low，触发 thinking_delta 供前端渲染）
  *   PI_MODELS_PATH       models.json 路径（默认 .pi/models.json，仅 provider 覆盖，不再含端点）
  *   PI_SKILLS_DIR        skills 目录（默认 .claude/skills）
+ *   PI_CONFIG_PATH       .pi/config.json 路径（默认仓库根 .pi/config.json；GET/PUT /api/config 读写）
  *
- * 凭据策略：env 优先注入（ModelRuntime.setRuntimeApiKey，内存态，不落盘）；env 缺失时
- * 由 SDK DefaultAuthStorage 兜底读取 auth.json（~/.pi/agent/auth.json，权限 600）。
+ * model id / thinking / baseUrl 的运行时落盘层为 .pi/config.json（优先级 env > 文件 > 默认值，
+ * 见 provider-config.ts），每次 createRuntime / getSessionSnapshot 时重新解析。API key 绝不落盘，
+ * 仅走 env（内存态 setRuntimeApiKey），env 缺失时 SDK DefaultAuthStorage 兜底读 auth.json；
  * 两者皆无 → createRuntime 显式抛错，绝不静默无凭据运行。
  */
 
@@ -167,15 +170,8 @@ export interface AgentRuntime {
   dispose(): void;
 }
 
-const MODEL_ID = process.env.PI_MODEL ?? 'claude-haiku-4-5';
-const THINKING = process.env.PI_THINKING ?? 'low';
 const MODELS_PATH = process.env.PI_MODELS_PATH ?? path.join(REPO_ROOT, '.pi', 'models.json');
 const SKILLS_DIR = process.env.PI_SKILLS_DIR ?? path.join(REPO_ROOT, '.claude', 'skills');
-
-/** anthropic 端点：ANTHROPIC_BASE_URL 优先；未设置回退 undefined（SDK 用官方 api.anthropic.com）。 */
-function resolveAnthropicBaseUrl(): string | undefined {
-  return process.env.ANTHROPIC_BASE_URL?.trim() || undefined;
-}
 
 /** anthropic api key（x-api-key 头）；未设置返回 undefined。 */
 function resolveAnthropicApiKey(): string | undefined {
@@ -188,25 +184,28 @@ type SessionThinkingLevel = NonNullable<Parameters<typeof createAgentSession>[0]
 let runtimePromise: Promise<AgentRuntime> | undefined;
 
 async function createRuntime(): Promise<AgentRuntime> {
-  // 1. 模型运行时 —— 端点由 env ANTHROPIC_BASE_URL 覆盖（.pi/models.json 不再硬编码端点）。
-  //    用 registerProvider 扩展层覆盖内置 anthropic baseUrl：不写 models.json，避免把中转域名提交进仓库。
+  // 0. 生效配置：env > .pi/config.json > 代码默认值（见 provider-config.ts）。
+  const cfg = await getEffectiveConfig();
+
+  // 1. 模型运行时 —— 端点由 env ANTHROPIC_BASE_URL / .pi/config.json baseUrl 覆盖
+  //    （.pi/models.json 不再硬编码端点）。用 registerProvider 扩展层覆盖内置 anthropic baseUrl：
+  //    不写 models.json，避免把中转域名提交进仓库。
   const modelRuntime = await ModelRuntime.create({ modelsPath: MODELS_PATH });
 
-  const baseUrl = resolveAnthropicBaseUrl();
-  if (baseUrl) {
-    modelRuntime.registerProvider('anthropic', { baseUrl });
+  if (cfg.baseUrl) {
+    modelRuntime.registerProvider(cfg.provider, { baseUrl: cfg.baseUrl });
   } else {
-    console.warn('[agent] ANTHROPIC_BASE_URL 未设置，回退 anthropic 官方端点 https://api.anthropic.com');
+    console.warn('[agent] baseUrl 未设置（env ANTHROPIC_BASE_URL / .pi/config.json baseUrl），回退 anthropic 官方端点 https://api.anthropic.com');
   }
 
   // 2. 凭据显式注入（env 优先，内存态不落盘）。env 缺失时 SDK DefaultAuthStorage 兜底读 auth.json。
   const apiKey = resolveAnthropicApiKey();
   if (apiKey) {
-    await modelRuntime.setRuntimeApiKey('anthropic', apiKey);
+    await modelRuntime.setRuntimeApiKey(cfg.provider, apiKey);
   }
 
   // 凭据校验：env + auth.json 均无 anthropic 凭据 → 显式报错，不静默运行。
-  const auth = await modelRuntime.getAuth('anthropic');
+  const auth = await modelRuntime.getAuth(cfg.provider);
   if (!auth) {
     throw new Error(
       '未找到 anthropic 凭据：请设置环境变量 ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN，' +
@@ -214,13 +213,13 @@ async function createRuntime(): Promise<AgentRuntime> {
     );
   }
 
-  let model = modelRuntime.getModel('anthropic', MODEL_ID);
+  let model = modelRuntime.getModel(cfg.provider, cfg.modelId);
   if (!model) {
     const available = await modelRuntime.getAvailable();
-    model = available.find((m) => m.provider === 'anthropic');
+    model = available.find((m) => m.provider === cfg.provider);
   }
   if (!model) {
-    throw new Error(`未找到可用的 anthropic 模型（PI_MODEL=${MODEL_ID}）`);
+    throw new Error(`未找到可用的 ${cfg.provider} 模型（modelId=${cfg.modelId}）`);
   }
 
   // 3. 资源加载器 —— 合并 .claude/skills 下 3 个 SKILL（tingguo-weekly 等），零格式改动。
@@ -244,7 +243,7 @@ async function createRuntime(): Promise<AgentRuntime> {
     cwd: REPO_ROOT,
     modelRuntime,
     model,
-    thinkingLevel: THINKING as SessionThinkingLevel,
+    thinkingLevel: cfg.thinkingLevel as SessionThinkingLevel,
     resourceLoader: loader,
     sessionManager: SessionManager.inMemory(),
   });
@@ -253,7 +252,7 @@ async function createRuntime(): Promise<AgentRuntime> {
   const state: AgentStateSnapshot = {
     status: 'idle',
     model: model.id,
-    thinkingLevel: THINKING,
+    thinkingLevel: cfg.thinkingLevel,
     skills,
   };
 
@@ -274,7 +273,7 @@ async function createRuntime(): Promise<AgentRuntime> {
   return {
     session,
     modelId: model.id,
-    thinkingLevel: THINKING,
+    thinkingLevel: cfg.thinkingLevel,
     skills,
     tools: session.getActiveToolNames(),
     dispose: () => session.dispose(),
@@ -309,9 +308,10 @@ export async function abortRun(): Promise<void> {
 
 /** 当前会话状态快照（连接时下发；不触发运行时创建）。 */
 export async function getSessionSnapshot(): Promise<AgentStateSnapshot> {
+  const cfg = await getEffectiveConfig();
   const pending = runtimePromise;
   if (!pending) {
-    return { status: 'initializing', model: MODEL_ID, thinkingLevel: THINKING, skills: [] };
+    return { status: 'initializing', model: cfg.modelId, thinkingLevel: cfg.thinkingLevel, skills: [] };
   }
   try {
     const runtime = await pending;
@@ -324,8 +324,8 @@ export async function getSessionSnapshot(): Promise<AgentStateSnapshot> {
   } catch (err) {
     return {
       status: 'error',
-      model: MODEL_ID,
-      thinkingLevel: THINKING,
+      model: cfg.modelId,
+      thinkingLevel: cfg.thinkingLevel,
       skills: [],
       error: err instanceof Error ? err.message : String(err),
     };
