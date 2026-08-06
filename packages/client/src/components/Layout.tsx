@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { HealthBadge } from './HealthBadge';
 import SettingsModal from './SettingsModal';
+import { IconBookOpen, IconDna, IconMessageSquare, IconMic, IconSettings } from './icons';
 
 const navItems = [
-  { to: '/chat', label: '对话', icon: '💬' },
-  { to: '/content', label: '内容管理', icon: '📚' },
-  { to: '/writing-dna', label: 'Writing DNA', icon: '🧬' },
+  { to: '/chat', label: '对话', Icon: IconMessageSquare },
+  { to: '/content', label: '内容管理', Icon: IconBookOpen },
+  { to: '/writing-dna', label: 'Writing DNA', Icon: IconDna },
 ];
 
 export default function Layout() {
@@ -17,9 +18,7 @@ export default function Layout() {
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <span className="text-lg" aria-hidden>
-              🎙️
-            </span>
+            <IconMic className="h-5 w-5" />
             <span className="text-sm font-semibold">spark-note</span>
           </div>
           <nav className="flex items-center gap-1">
@@ -35,8 +34,8 @@ export default function Layout() {
                   }`
                 }
               >
-                <span className="mr-1" aria-hidden>
-                  {item.icon}
+                <span className="mr-1 inline-flex items-center" aria-hidden>
+                  <item.Icon className="h-4 w-4" />
                 </span>
                 {item.label}
               </NavLink>
@@ -50,7 +49,7 @@ export default function Layout() {
               aria-label="Provider / Model 设置"
               title="Provider / Model 设置"
             >
-              ⚙️
+              <IconSettings className="h-5 w-5" />
             </button>
           </div>
         </div>
