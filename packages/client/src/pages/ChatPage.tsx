@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import type { ChatItem, ToolCallItem } from '../lib/chat';
 import { Markdown } from '../lib/markdown';
+import { IconCheck, IconCopy, IconX } from '../components/icons';
 import ConversationSidebar from '../components/ConversationSidebar';
 
 /**
@@ -91,6 +92,75 @@ const TypewriterCursor = forwardRef<HTMLSpanElement>(function TypewriterCursor(_
   return <span ref={ref} aria-hidden="true" className="typewriter-cursor" />;
 });
 
+/** 复制文本到剪贴板：优先 navigator.clipboard（需安全上下文），失败降级 execCommand。 */
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // 权限被拒 / 非安全上下文等 → 走降级路径
+    }
+  }
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/** 消息气泡复制按钮：hover 显示（移动端可聚焦），点击复制完整原文（与 reveal 进度无关），
+ *  成功短暂显示对勾，两条剪贴板路径都失败时显示失败态作为提示。 */
+function MessageCopyButton({ text }: { text: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const timerRef = useRef<number | null>(null);
+
+  // 卸载时清理计时器，避免卸载后 setState。
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  const handleCopy = () => {
+    void copyTextToClipboard(text).then((ok) => {
+      setState(ok ? 'copied' : 'failed');
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setState('idle'), 1200);
+    });
+  };
+
+  const label = state === 'copied' ? '已复制' : state === 'failed' ? '复制失败' : '复制消息';
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={label}
+      aria-label={label}
+      className="mt-1 shrink-0 rounded-md p-1 text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-200/70 hover:text-neutral-700 focus:opacity-100 focus-visible:outline-none group-hover:opacity-100"
+    >
+      {state === 'copied' ? (
+        <IconCheck className="h-3.5 w-3.5 text-emerald-500" />
+      ) : state === 'failed' ? (
+        <IconX className="h-3.5 w-3.5 text-red-500" />
+      ) : (
+        <IconCopy className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+}
+
 /** 单条消息气泡。 */
 function MessageBubble({ item }: { item: ChatItem }) {
   // 打字机式流式浮现：仅实时流式的助手消息有逐字 reveal + 块状光标；
@@ -110,8 +180,9 @@ function MessageBubble({ item }: { item: ChatItem }) {
 
   if (item.role === 'user') {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-neutral-900 px-4 py-2.5 text-sm leading-relaxed text-white whitespace-pre-wrap">
+      <div className="group flex items-start justify-end gap-1">
+        <MessageCopyButton text={item.text} />
+        <div className="max-w-[85%] min-w-0 rounded-2xl rounded-tr-sm bg-neutral-900 px-4 py-2.5 text-sm leading-relaxed text-white whitespace-pre-wrap">
           {item.text}
         </div>
       </div>
@@ -119,8 +190,8 @@ function MessageBubble({ item }: { item: ChatItem }) {
   }
 
   return (
-    <div className="flex justify-start">
-      <div className="max-w-[92%] rounded-2xl rounded-tl-sm bg-neutral-100 px-4 py-2.5 text-sm leading-relaxed text-neutral-900">
+    <div className="group flex items-start justify-start gap-1">
+      <div className="max-w-[92%] min-w-0 rounded-2xl rounded-tl-sm bg-neutral-100 px-4 py-2.5 text-sm leading-relaxed text-neutral-900">
         {item.thinking && (
           <details className="mb-1.5 rounded-lg bg-white/70">
             <summary className="cursor-pointer select-none px-2 py-1 text-xs font-medium text-neutral-500 hover:text-neutral-700">
@@ -150,6 +221,7 @@ function MessageBubble({ item }: { item: ChatItem }) {
 
         {item.error && <p className="mt-1 text-xs text-red-600">出错：{item.error}</p>}
       </div>
+      {item.text && <MessageCopyButton text={item.text} />}
     </div>
   );
 }
