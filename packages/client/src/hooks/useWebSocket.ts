@@ -6,6 +6,8 @@ export type WsStatus = 'connecting' | 'open' | 'closed';
 export interface WsEnvelope<T = unknown> {
   type: string;
   payload?: T;
+  /** 事件所属会话 id（服务端广播携带，客户端据此过滤其他会话的事件）。 */
+  conversationId?: string;
   ts?: number;
 }
 

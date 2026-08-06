@@ -97,6 +97,78 @@ export async function listContentIssues(): Promise<{ issues: ContentIssue[] }> {
   return (await res.json()) as { issues: ContentIssue[] };
 }
 
+/* ---- 会话管理数据 API ---- */
+
+/** 会话列表项（字段与 packages/server routes/conversations.ts 的 mapSessionInfo 保持一致）。 */
+export interface Conversation {
+  id: string;
+  name: string;
+  created: string;
+  modified: string;
+  messageCount: number;
+  preview: string;
+}
+
+/** 会话历史消息（role + text，服务端从 JSONL 提取）。 */
+export interface ConversationMessage {
+  role: string;
+  text: string;
+}
+
+/** 列出全部会话，按 modified 倒序。 */
+export async function listConversations(): Promise<{ conversations: Conversation[] }> {
+  const res = await fetch('/api/conversations');
+  if (!res.ok) {
+    throw new Error(`list conversations failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as { conversations: Conversation[] };
+}
+
+/** 新建会话（服务端落盘 JSONL header），返回会话 id。 */
+export async function createConversation(): Promise<{ id: string }> {
+  const res = await fetch('/api/conversations', { method: 'POST' });
+  const body = (await res.json()) as { id?: string; error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `create conversation failed: ${res.status} ${res.statusText}`);
+  }
+  return { id: body.id ?? '' };
+}
+
+/** 读取指定会话的历史消息（含会话 name）。 */
+export async function getConversationMessages(
+  id: string,
+): Promise<{ id: string; name: string; messages: ConversationMessage[] }> {
+  const res = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`);
+  if (!res.ok) {
+    throw new Error(`get conversation messages failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as { id: string; name: string; messages: ConversationMessage[] };
+}
+
+/** 重命名会话。 */
+export async function renameConversation(id: string, name: string): Promise<{ id: string; name: string }> {
+  const res = await fetch(`/api/conversations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const body = (await res.json()) as { id?: string; name?: string; error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `rename conversation failed: ${res.status} ${res.statusText}`);
+  }
+  return { id: body.id ?? id, name: body.name ?? name };
+}
+
+/** 删除会话（含 JSONL 文件）。 */
+export async function deleteConversation(id: string): Promise<{ id: string; deleted: boolean }> {
+  const res = await fetch(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const body = (await res.json()) as { id?: string; deleted?: boolean; error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `delete conversation failed: ${res.status} ${res.statusText}`);
+  }
+  return { id: body.id ?? id, deleted: body.deleted ?? true };
+}
+
 /* ---- Provider / Model 配置 API ---- */
 
 /** 配置来源：env > .pi/config.json > 代码默认值。 */
