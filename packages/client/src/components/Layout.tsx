@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { HealthBadge } from './HealthBadge';
+import SettingsModal from './SettingsModal';
 
 const navItems = [
   { to: '/chat', label: '对话', icon: '💬' },
@@ -8,6 +10,8 @@ const navItems = [
 ];
 
 export default function Layout() {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-neutral-200 bg-white">
@@ -38,7 +42,17 @@ export default function Layout() {
               </NavLink>
             ))}
           </nav>
-          <HealthBadge />
+          <div className="flex items-center gap-2">
+            <HealthBadge />
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="rounded-md px-2 py-1.5 text-lg transition-colors hover:bg-neutral-100"
+              aria-label="Provider / Model 设置"
+              title="Provider / Model 设置"
+            >
+              ⚙️
+            </button>
+          </div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
@@ -47,6 +61,7 @@ export default function Layout() {
       <footer className="border-t border-neutral-200 bg-white py-3 text-center text-xs text-neutral-400">
         spark-note · 单用户 · React + Vite + Fastify
       </footer>
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

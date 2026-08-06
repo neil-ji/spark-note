@@ -7,6 +7,7 @@ import { CLIENT_DIST, HOST, SERVER_PORT } from './config.js';
 import { registerWebSocket, wsHub } from './ws.js';
 import { registerWritingDnaRoutes } from './routes/writing-dna.js';
 import { registerContentRoutes } from './routes/content.js';
+import { registerConfigRoutes } from './routes/config.js';
 import { getAgentRuntime } from './agent.js';
 
 /** 组装 Fastify 实例：健康检查 API、WebSocket 基础设施、Writing DNA 数据 API、前端静态资源托管。 */
@@ -31,6 +32,9 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // 内容管理数据 API（《听过》各期元信息列表 + 只读静态文件预览）
   await registerContentRoutes(app);
+
+  // Provider/Model 配置 API（GET/PUT /api/config，持久化到 .pi/config.json）
+  await registerConfigRoutes(app);
 
   // 静态资源服务：托管前端 build 产物（packages/client/dist）。
   // dev 模式下由 Vite dev server 提供页面；仅 build 后 dist 存在时才注册。

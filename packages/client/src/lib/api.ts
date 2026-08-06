@@ -96,3 +96,51 @@ export async function listContentIssues(): Promise<{ issues: ContentIssue[] }> {
   }
   return (await res.json()) as { issues: ContentIssue[] };
 }
+
+/* ---- Provider / Model 配置 API ---- */
+
+/** 配置来源：env > .pi/config.json > 代码默认值。 */
+export type ConfigSourceKind = 'env' | 'file' | 'default';
+
+/** 当前生效配置 + 每字段来源说明（字段与 packages/server 的 EffectiveConfig 保持一致）。 */
+export interface ConfigResponse {
+  provider: string;
+  modelId: string;
+  thinkingLevel: string;
+  baseUrl: string | null;
+  source: Record<'provider' | 'modelId' | 'thinkingLevel' | 'baseUrl', ConfigSourceKind>;
+  /** 落盘的 .pi/config.json 内容（未修改过时为空对象）。 */
+  file?: Record<string, unknown>;
+  /** 配置写盘路径。 */
+  configPath?: string;
+  saved?: boolean;
+  note?: string;
+}
+
+/** 读取当前生效的 Provider/Model 配置。 */
+export async function getConfig(): Promise<ConfigResponse> {
+  const res = await fetch('/api/config');
+  if (!res.ok) {
+    throw new Error(`get config failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as ConfigResponse;
+}
+
+/** 保存配置补丁到 .pi/config.json（重启后端后生效）。 */
+export async function saveConfig(patch: {
+  provider?: string;
+  modelId?: string;
+  thinkingLevel?: string;
+  baseUrl?: string | null;
+}): Promise<ConfigResponse> {
+  const res = await fetch('/api/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const body = (await res.json()) as ConfigResponse & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `save config failed: ${res.status} ${res.statusText}`);
+  }
+  return body;
+}
