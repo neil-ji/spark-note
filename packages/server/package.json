@@ -5,9 +5,9 @@
   "type": "module",
   "description": "spark-note 后端 — Fastify 健康检查 / 静态资源 / WebSocket 基础设施",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "NODE_USE_ENV_PROXY=1 tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "NODE_USE_ENV_PROXY=1 node dist/index.js",
     "test": "node --import tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
