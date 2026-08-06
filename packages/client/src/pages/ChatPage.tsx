@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '../hooks/useChat';
+import { useTypewriter } from '../hooks/useTypewriter';
 import {
   createConversation,
   deleteConversation,
@@ -84,8 +85,26 @@ function ToolCallCard({ tool }: { tool: ToolCallItem }) {
   );
 }
 
+/** 打字机流式光标：CSS 块状光标（非 emoji 字符）。 */
+const TypewriterCursor = forwardRef<HTMLSpanElement>(function TypewriterCursor(_props, ref) {
+  return <span ref={ref} aria-hidden="true" className="typewriter-cursor" />;
+});
+
 /** 单条消息气泡。 */
 function MessageBubble({ item }: { item: ChatItem }) {
+  // 打字机式流式浮现：仅实时流式的助手消息有逐字 reveal + 块状光标；
+  // 历史回显 / 已完成的用户与助手消息（含 abort 后）直接全文停驻、无光标。
+  const typewriting = item.role === 'assistant' && item.status === 'streaming';
+  const { display, showCursor } = useTypewriter(item.text, typewriting);
+  const cursorRef = useRef<HTMLSpanElement>(null);
+
+  // 流式期间保持光标在可视区内：reveal 推进把光标推出滚动容器外时滚动回视。
+  useEffect(() => {
+    if (showCursor && cursorRef.current) {
+      cursorRef.current.scrollIntoView({ block: 'nearest' });
+    }
+  }, [showCursor, display]);
+
   if (item.role === 'user') {
     return (
       <div className="flex justify-end">
@@ -114,7 +133,12 @@ function MessageBubble({ item }: { item: ChatItem }) {
           <ToolCallCard key={tool.id} tool={tool} />
         ))}
 
-        {item.text && <p className="whitespace-pre-wrap">{item.text}</p>}
+        {item.text && (
+          <p className="whitespace-pre-wrap">
+            {display}
+            {showCursor && <TypewriterCursor ref={cursorRef} />}
+          </p>
+        )}
 
         {item.status === 'streaming' && !item.text && (
           <span className="text-neutral-400">正在思考…</span>
