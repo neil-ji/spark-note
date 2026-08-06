@@ -9,7 +9,7 @@ import {
   type AgentSession,
   type AgentSessionEvent,
 } from '@earendil-works/pi-coding-agent';
-import { REPO_ROOT } from './repo-paths.js';
+import { REPO_ROOT, SESSION_DIR } from './repo-paths.js';
 import { getEffectiveConfig } from './provider-config.js';
 
 /**
@@ -17,7 +17,8 @@ import { getEffectiveConfig } from './provider-config.js';
  *
  * 复用 spike（`.pi/run-tingguo-weekly.mjs` + `spike-pi-sdk/verify-streaming.mjs`）的
  * session 封装模式：ModelRuntime(models 覆盖) + DefaultResourceLoader(.claude/skills 合并)
- * + SessionManager.inMemory() + createAgentSession。真实 pi SDK 会话，禁止 mock。
+ * + SessionManager.continueRecent(REPO_ROOT, .pi/sessions/) + createAgentSession。
+ * 真实 pi SDK 会话（JSONL 落盘），禁止 mock。
  *
  * 模型与凭据（env > .pi/config.json > 代码默认值；禁止把第三方中转域名硬编码进仓库/文档）：
  *   ANTHROPIC_BASE_URL   anthropic 端点。未设置 → 回退官方语义 https://api.anthropic.com。
@@ -238,14 +239,15 @@ async function createRuntime(): Promise<AgentRuntime> {
   });
   await loader.reload();
 
-  // 4. 会话 —— 内存会话（多轮对话在服务生命周期内保持；持久化 JSONL 为后续增强）。
+  // 4. 会话 —— 持久化 JSONL（.pi/sessions/）。continueRecent 语义：无会话时新建，
+  //    重启后恢复最近会话（等价于"create 新建 + continueRecent 恢复"的组合）。
   const { session } = await createAgentSession({
     cwd: REPO_ROOT,
     modelRuntime,
     model,
     thinkingLevel: cfg.thinkingLevel as SessionThinkingLevel,
     resourceLoader: loader,
-    sessionManager: SessionManager.inMemory(),
+    sessionManager: SessionManager.continueRecent(REPO_ROOT, SESSION_DIR),
   });
 
   const skills = loader.getSkills().skills.map((s) => s.name);
