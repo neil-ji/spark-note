@@ -81,7 +81,9 @@ export const initialChatState: ChatState = {
 export type ChatAction =
   | { type: 'send'; text: string }
   | { type: 'snapshot'; snapshot: AgentStateSnapshot }
-  | { type: 'event'; event: AgentWsEvent };
+  | { type: 'event'; event: AgentWsEvent }
+  | { type: 'reset' }
+  | { type: 'history'; messages: { role: string; text: string }[] };
 
 function newId(): string {
   return crypto.randomUUID();
@@ -214,6 +216,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case 'event':
       return applyEvent(state, action.event);
+    case 'reset':
+      // 切换会话：清空为初始态（历史消息随后由 history 填充）。
+      return initialChatState;
+    case 'history': {
+      // 已有消息（用户已发送 / 正在流式）时不覆盖，避免竞态丢失会话内消息。
+      if (state.items.length > 0) return state;
+      const items: ChatItem[] = action.messages.map((m) => ({
+        id: newId(),
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        text: m.text,
+        thinking: '',
+        tools: [],
+        status: 'done' as const,
+      }));
+      return { ...state, items, currentIdx: null, pendingToolArgs: '', queued: [] };
+    }
     default:
       return state;
   }

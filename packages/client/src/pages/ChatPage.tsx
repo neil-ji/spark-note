@@ -1,12 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '../hooks/useChat';
+import {
+  createConversation,
+  deleteConversation,
+  listConversations,
+  renameConversation,
+  type Conversation,
+} from '../lib/api';
 import type { ChatItem, ToolCallItem } from '../lib/chat';
+import ConversationSidebar from '../components/ConversationSidebar';
 
 /**
- * 对话页：流式渲染 pi agent 的文本 / 思考 / 工具调用，支持 abort 中断。
+ * 对话页：会话侧栏（新建/切换/重命名/删除）+ 流式渲染 pi agent 的文本 / 思考 / 工具调用。
  *
  * 事件经 WebSocket 由后端转发（useChat → chatReducer），消息列表按角色分栏展示：
  * 用户（深色气泡）与助手（浅色气泡：思考过程可折叠 + 工具调用卡片 + 流式文本）。
+ * 切换会话时 useChat 重连 /ws?conversation=<id> 并加载历史消息。
  */
 
 const WS_LABEL: Record<string, string> = {
@@ -118,9 +127,44 @@ function MessageBubble({ item }: { item: ChatItem }) {
 }
 
 export default function ChatPage() {
-  const { items, status, model, thinkingLevel, skills, queued, wsStatus, canSend, sendMessage, abort } = useChat();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
+
+  /** 重新拉取会话列表（新建 / 重命名 / 删除 / 一轮对话落盘后刷新标题与时间）。 */
+  const refreshConversations = useCallback(async (): Promise<Conversation[]> => {
+    const { conversations } = await listConversations();
+    setConversations(conversations);
+    return conversations;
+  }, []);
+
+  // 首次加载：拉取会话列表并选中最近一个。
+  useEffect(() => {
+    let cancelled = false;
+    listConversations()
+      .then(({ conversations }) => {
+        if (cancelled) return;
+        setConversations(conversations);
+        setActiveId((prev) => prev ?? conversations[0]?.id ?? null);
+      })
+      .catch(() => {
+        // 列表加载失败静默降级：聊天区仍可用（首次对话由后端建默认会话）。
+      })
+      .finally(() => {
+        if (!cancelled) setListLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const chat = useChat(activeId, refreshConversations);
+  const { items, status, model, thinkingLevel, skills, queued, wsStatus, canSend, sendMessage, abort } = chat;
+
+  const streaming = status === 'streaming';
 
   // 新内容到达时滚动到底部。
   useEffect(() => {
@@ -128,90 +172,157 @@ export default function ChatPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [items]);
 
-  const streaming = status === 'streaming';
-
   const handleSend = () => {
-    if (sendMessage(input)) setInput('');
+    if (sendMessage(input)) {
+      setInput('');
+      // 首条消息后会话标题/时间由 agent_settled 刷新；这里先乐观刷新一次。
+      refreshConversations().catch(() => {});
+    }
   };
 
+  const handleCreate = async () => {
+    setActionError(null);
+    try {
+      const { id } = await createConversation();
+      await refreshConversations();
+      setActiveId(id);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleRename = async (id: string, name: string) => {
+    setActionError(null);
+    try {
+      await renameConversation(id, name);
+      await refreshConversations();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setActionError(null);
+    try {
+      await deleteConversation(id);
+      const list = await refreshConversations();
+      // 删除的正是当前会话 → 切到最近一个；否则保持当前会话。
+      setActiveId((prev) =>
+        prev && prev !== id && list.some((c) => c.id === prev) ? prev : list[0]?.id ?? null,
+      );
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const placeholder = !activeId
+    ? '请先在左侧新建会话'
+    : canSend
+      ? '输入消息，Enter 发送，Shift+Enter 换行。运行中发送会自动排队。'
+      : 'WebSocket 未连接…';
+
   return (
-    <div className="mx-auto flex h-[calc(100vh-7rem)] max-w-3xl flex-col gap-4">
-      {/* 顶栏：连接状态 / agent 状态 / 模型信息 / abort */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="mr-auto">
-          <h1 className="text-lg font-semibold">智能体对话</h1>
-          <p className="mt-0.5 text-sm text-neutral-500">
-            {model ? `模型 ${model} · thinking ${thinkingLevel}` : '对话式驱动 agent 调 SKILL 产出内容'}
-          </p>
+    <div className="flex h-[calc(100vh-7rem)] gap-4">
+      <ConversationSidebar
+        conversations={conversations}
+        activeId={activeId}
+        loading={listLoading}
+        onSelect={setActiveId}
+        onCreate={handleCreate}
+        onRename={handleRename}
+        onDelete={handleDelete}
+      />
+
+      <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col gap-4">
+        {/* 顶栏：连接状态 / agent 状态 / 模型信息 / abort */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="mr-auto">
+            <h1 className="text-lg font-semibold">智能体对话</h1>
+            <p className="mt-0.5 text-sm text-neutral-500">
+              {model ? `模型 ${model} · thinking ${thinkingLevel}` : '对话式驱动 agent 调 SKILL 产出内容'}
+            </p>
+          </div>
+          {skills.length > 0 && (
+            <span className="hidden text-xs text-neutral-400 sm:inline">skills: {skills.join(' / ')}</span>
+          )}
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${WS_STYLE[wsStatus]}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            WebSocket {WS_LABEL[wsStatus]}
+          </span>
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${AGENT_STYLE[status]}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            {AGENT_LABEL[status]}
+          </span>
+          {streaming && (
+            <button
+              onClick={abort}
+              className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+            >
+              中断
+            </button>
+          )}
         </div>
-        {skills.length > 0 && (
-          <span className="hidden text-xs text-neutral-400 sm:inline">skills: {skills.join(' / ')}</span>
+
+        {actionError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+            会话操作失败：{actionError}
+          </div>
         )}
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${WS_STYLE[wsStatus]}`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-          WebSocket {WS_LABEL[wsStatus]}
-        </span>
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${AGENT_STYLE[status]}`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-          {AGENT_LABEL[status]}
-        </span>
-        {streaming && (
+
+        {/* 消息列表 */}
+        <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-4">
+          {items.length === 0 && (
+            <div className="py-16 text-center">
+              {!activeId ? (
+                <p className="text-sm text-neutral-400">点击左侧「新建会话」开始对话</p>
+              ) : (
+                <>
+                  <p className="text-sm text-neutral-400">发一条消息开始对话，例如：</p>
+                  <p className="mt-2 text-sm text-neutral-500">「GitHub trending 这周有什么好项目？」</p>
+                  <p className="text-sm text-neutral-500">「用 tingguo-weekly 产出一期《听过》周刊」</p>
+                </>
+              )}
+            </div>
+          )}
+          {items.map((item) => (
+            <MessageBubble key={item.id} item={item} />
+          ))}
+          {queued.length > 0 && (
+            <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              已排队 {queued.length} 条消息，将在当前运行结束后处理。
+            </div>
+          )}
+          {status === 'error' && !streaming && (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
+              会话出错（{model || 'agent 未初始化'}）。请检查后端与模型配置后重试。
+            </div>
+          )}
+        </div>
+
+        {/* 输入区 */}
+        <div className="flex items-end gap-2">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            rows={2}
+            placeholder={placeholder}
+            disabled={!canSend}
+            className="flex-1 resize-none rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 disabled:opacity-50"
+          />
           <button
-            onClick={abort}
-            className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+            onClick={handleSend}
+            disabled={!canSend || !input.trim()}
+            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-40"
           >
-            中断
+            发送
           </button>
-        )}
-      </div>
-
-      {/* 消息列表 */}
-      <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-4">
-        {items.length === 0 && (
-          <div className="py-16 text-center">
-            <p className="text-sm text-neutral-400">发一条消息开始对话，例如：</p>
-            <p className="mt-2 text-sm text-neutral-500">「GitHub trending 这周有什么好项目？」</p>
-            <p className="text-sm text-neutral-500">「用 tingguo-weekly 产出一期《听过》周刊」</p>
-          </div>
-        )}
-        {items.map((item) => (
-          <MessageBubble key={item.id} item={item} />
-        ))}
-        {queued.length > 0 && (
-          <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-            已排队 {queued.length} 条消息，将在当前运行结束后处理。
-          </div>
-        )}
-        {status === 'error' && !streaming && (
-          <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
-            会话出错（{model || 'agent 未初始化'}）。请检查后端与模型配置后重试。
-          </div>
-        )}
-      </div>
-
-      {/* 输入区 */}
-      <div className="flex items-end gap-2">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          rows={2}
-          placeholder={canSend ? '输入消息，Enter 发送，Shift+Enter 换行。运行中发送会自动排队。' : 'WebSocket 未连接…'}
-          disabled={!canSend}
-          className="flex-1 resize-none rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 disabled:opacity-50"
-        />
-        <button
-          onClick={handleSend}
-          disabled={!canSend || !input.trim()}
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-40"
-        >
-          发送
-        </button>
+        </div>
       </div>
     </div>
   );
