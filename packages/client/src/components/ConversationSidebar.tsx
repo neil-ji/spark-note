@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Conversation } from '../lib/api';
-import { IconCheck, IconMessageSquare, IconPencil, IconPlus, IconTrash, IconX } from './icons';
+import { IconCheck, IconMessageSquare, IconPencil, IconPlus, IconSearch, IconTrash, IconX } from './icons';
 
 /** 会话列表项的展示时间：刚刚 / N 分钟前 / N 小时前 / 月-日。 */
 function formatTime(iso: string): string {
@@ -49,6 +49,13 @@ export default function ConversationSidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renamingName, setRenamingName] = useState('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  // 前端内存过滤：按 name / preview 不区分大小写子串匹配（后端 list 已全量，无需额外请求）。
+  const query = search.trim().toLowerCase();
+  const filteredConversations = query
+    ? conversations.filter((c) => (c.name || c.preview || '').toLowerCase().includes(query))
+    : conversations;
 
   const startRename = (c: Conversation) => {
     setRenamingId(c.id);
@@ -117,6 +124,23 @@ export default function ConversationSidebar({
           </div>
         </div>
 
+        {/* 搜索框：按 name/preview 前端内存过滤（无会话时隐藏，避免空输入框占位）。 */}
+        {conversations.length > 0 && (
+          <div className="border-b border-neutral-200 p-2">
+            <div className="relative">
+              <IconSearch className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜索会话"
+                aria-label="搜索会话"
+                className="w-full rounded-md border border-neutral-200 bg-neutral-50 py-1.5 pl-7 pr-2 text-xs text-neutral-800 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 focus:bg-white"
+              />
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
           {loading && conversations.length === 0 && (
             <div className="px-2 py-8 text-center text-xs text-neutral-400">加载中…</div>
@@ -127,8 +151,14 @@ export default function ConversationSidebar({
               <p className="mt-2 text-xs text-neutral-400">暂无会话</p>
             </div>
           )}
+          {!loading && conversations.length > 0 && filteredConversations.length === 0 && (
+            <div className="px-2 py-10 text-center">
+              <IconSearch className="mx-auto h-6 w-6 text-neutral-300" />
+              <p className="mt-2 text-xs text-neutral-400">无匹配会话</p>
+            </div>
+          )}
 
-          {conversations.map((c) => {
+          {filteredConversations.map((c) => {
             const active = c.id === activeId;
             const isRenaming = renamingId === c.id;
             const isConfirming = confirmingId === c.id;

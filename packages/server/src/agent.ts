@@ -8,6 +8,8 @@ import {
   getAgentDir,
   type AgentSession,
   type AgentSessionEvent,
+  type SessionEntry,
+  type SessionMessageEntry,
 } from '@earendil-works/pi-coding-agent';
 import { REPO_ROOT, SESSION_DIR } from './repo-paths.js';
 import { getEffectiveConfig } from './provider-config.js';
@@ -175,6 +177,13 @@ export interface ConversationStateSnapshot {
 export const agentEvents = new Fanout<ConversationAgentEvent>();
 /** 会话状态快照（idle/streaming/error + 模型/skills 元信息，携带 conversationId）。 */
 export const sessionStates = new Fanout<ConversationStateSnapshot>();
+/** 会话元信息变化（自动命名完成后下发新标题，携带 conversationId）。 */
+export interface ConversationMetadataUpdate {
+  conversationId: string;
+  name: string;
+}
+/** 会话元信息变化流（供 WS 层转发，客户端据此刷新会话列表）。 */
+export const conversationUpdated = new Fanout<ConversationMetadataUpdate>();
 
 /* ── 会话运行时（单用户，按 conversationId 缓存独立 AgentRuntime）── */
 
@@ -218,6 +227,148 @@ async function openSessionManager(conversationId: string): Promise<SessionManage
     throw new Error(`会话不存在: ${conversationId}`);
   }
   return SessionManager.open(info.path, SESSION_DIR);
+}
+
+/* ── 会话自动命名（agent_settled 后触发，单次轻量模型调用生成 ≤8 字标题）── */
+
+/** 命名调用输出 token 上限（标题 ≤8 字，成本克制）。 */
+const NAME_MAX_TOKENS = 48;
+/** 命名摘要源单侧截断上限（首条用户消息 / 首条助手回复各取前 300 字）。 */
+const NAME_SOURCE_MAX = 300;
+/** 命名专用 system prompt：短、明确要求直接输出标题本身。 */
+const NAME_SYSTEM_PROMPT =
+  '你是会话标题生成器。根据对话内容用中文生成一个不超过 8 个字的会话短标题。' +
+  '只输出标题本身，不要引号、冒号或任何解释。';
+
+/** 标题清洗：去首尾引号/括号与空白、取第一行、去「标题：」前缀、截断到 ≤8 字；空结果返回 null。 */
+export function sanitizeTitle(raw: string): string | null {
+  const firstLine = raw.trim().split(/\n/)[0] ?? '';
+  const cleaned = firstLine
+    .replace(/^[\s"''「『【（(“”]+/, '')
+    .replace(/[\s"''」』【】（）)“”]+$/, '')
+    .replace(/^标题\s*[:：]\s*/, '')
+    .trim();
+  const title = Array.from(cleaned).slice(0, 8).join('').trim();
+  return title.length >= 1 ? title : null;
+}
+
+/** 摘要源截断：超出上限补省略号（控制 prompt 长度）。 */
+function truncateForName(text: string, max = NAME_SOURCE_MAX): string {
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, max).join('')}…` : text;
+}
+
+/** 消息 content → 纯文本（text 块 + thinking 块；toolCall 与命名主题无关，跳过）。 */
+function extractNamingText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  const parts: string[] = [];
+  for (const block of content as Array<Record<string, unknown>>) {
+    if (block?.type === 'text' && typeof block.text === 'string') parts.push(block.text);
+    else if (block?.type === 'thinking' && typeof block.thinking === 'string') parts.push(block.thinking);
+  }
+  return parts.join('\n');
+}
+
+/** 命名摘要源：首条用户消息 + 首条助手回复（各自截断，控制 prompt 长度与成本）。 */
+function extractNamingSource(entries: SessionEntry[]): string {
+  let userText = '';
+  let assistantText = '';
+  for (const entry of entries) {
+    if (entry.type !== 'message') continue;
+    const msg = (entry as SessionMessageEntry).message as unknown as {
+      role?: string;
+      content?: unknown;
+    };
+    if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+    const text = extractNamingText(msg.content).trim();
+    if (!text) continue;
+    if (msg.role === 'user') {
+      if (!userText) userText = truncateForName(text);
+    } else if (!assistantText) {
+      assistantText = truncateForName(text);
+    }
+    if (userText && assistantText) break;
+  }
+  return [userText && `用户：${userText}`, assistantText && `助手：${assistantText}`].filter(Boolean).join('\n');
+}
+
+/**
+ * 一次轻量模型调用生成 ≤8 字中文标题（复用会话运行时同款模型与凭据，不污染会话上下文）。
+ * 失败 / 结果不可用返回 null，由调用方静默降级（保持首条消息标题）。
+ */
+async function generateConversationTitle(
+  modelRuntime: ModelRuntime,
+  model: NonNullable<AgentSession['model']>,
+  source: string,
+): Promise<string | null> {
+  try {
+    const result = await modelRuntime.completeSimple(
+      model,
+      {
+        systemPrompt: NAME_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: `${source}\n\n标题：`, timestamp: Date.now() }],
+      },
+      { maxTokens: NAME_MAX_TOKENS, reasoning: 'minimal' },
+    );
+    let text = '';
+    for (const block of result.content) {
+      if (block.type === 'text') text += block.text;
+    }
+    return sanitizeTitle(text);
+  } catch {
+    return null; // 命名失败静默降级（保持首条消息标题）
+  }
+}
+
+/**
+ * 会话自动命名（agent_settled 后触发）：会话无 name 时，用一次轻量模型调用
+ * 生成 ≤8 字中文标题并写入 session_info，完成后扇出 conversationUpdated。
+ *
+ * 覆盖规则：落盘前用最新文件态复查 name，用户已重命名 / 已自动命名 → 跳过，绝不覆盖。
+ * 任一步失败（无运行时 / 模型缺失 / LLM 调用失败 / 结果为空 / 会话消失）→ 返回 null，静默降级。
+ * 成本：每个会话至多每轮一次轻量调用；命名成功后 name 非空，后续 settle 直接跳过。
+ */
+export async function autoNameConversation(conversationId: string): Promise<string | null> {
+  // 运行时未缓存（会话从未运行过）→ 跳过。
+  const pending = runtimes.get(conversationId);
+  if (!pending) return null;
+  let session: AgentSession;
+  try {
+    session = (await pending).session;
+  } catch {
+    return null;
+  }
+  const model = session.model;
+  if (!model) return null;
+
+  // 最新文件态已命名（用户重命名或已自动命名）→ 不再自动覆盖。
+  let manager: SessionManager;
+  try {
+    manager = await openSessionManager(conversationId);
+  } catch {
+    return null; // 会话已删除等
+  }
+  if (manager.getSessionName()) return null;
+
+  // 摘要源：首条用户消息 + 首条助手回复。
+  const source = extractNamingSource(manager.getEntries());
+  if (!source) return null;
+
+  // 一次轻量模型调用（短 prompt、≤8 字、低 token）——失败静默降级。
+  const title = await generateConversationTitle(session.modelRuntime, model, source);
+  if (!title) return null;
+
+  // 落盘前复查：模型调用期间用户可能已重命名 → 覆盖则放弃本次命名。
+  try {
+    const fresh = await openSessionManager(conversationId);
+    if (fresh.getSessionName()) return null;
+    fresh.appendSessionInfo(title);
+  } catch {
+    return null;
+  }
+  conversationUpdated.emit({ conversationId, name: title });
+  return title;
 }
 
 async function createRuntime(targetConversationId?: string): Promise<{ runtime: AgentRuntime; conversationId: string }> {
@@ -308,6 +459,9 @@ async function createRuntime(targetConversationId?: string): Promise<{ runtime: 
       sessionStates.emit({ conversationId, state: { ...state, status: 'streaming' } });
     } else if (event.type === 'agent_settled') {
       sessionStates.emit({ conversationId, state: { ...state, status: 'idle' } });
+      // 自动命名：会话无 name 且一轮对话完成 → 单次轻量模型调用生成 ≤8 字标题。
+      // 异步执行不阻塞事件循环；内部全失败静默降级（保持首条消息标题），cost 每轮至多一次。
+      void autoNameConversation(conversationId).catch(() => {});
     }
   });
 

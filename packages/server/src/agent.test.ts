@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { normalizeAgentEvent, stringifyToolResult, getSessionSnapshot } from './agent.js';
+import { normalizeAgentEvent, stringifyToolResult, getSessionSnapshot, sanitizeTitle } from './agent.js';
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 
 function ev(value: unknown): AgentSessionEvent {
@@ -101,6 +101,22 @@ test('getSessionSnapshot 反映 .pi/config.json 中的 model/thinking 配置', a
     else process.env.PI_THINKING = prevThinking;
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('sanitizeTitle 清洗模型输出为 ≤8 字标题（去引号/前缀/多行、截断、空值降级）', () => {
+  // 引号/书名号包裹、多行输出 → 取首行并去包裹。
+  assert.equal(sanitizeTitle('「小红书种草文案」\n（含使用教程）'), '小红书种草文案');
+  assert.equal(sanitizeTitle('"用 write-xiaohongshu 写种草文案"'), '用 write-');
+  // 「标题：」前缀剥离（模型偶发输出带标签）。
+  assert.equal(sanitizeTitle('标题：小红书种草文案'), '小红书种草文案');
+  assert.equal(sanitizeTitle('标题:小红书种草文案'), '小红书种草文案');
+  // 超长 → 按码点截断到 8 字（surrogate pair 不劈裂）。
+  assert.equal(sanitizeTitle('这是一个非常非常长的会话标题超过八个字'), '这是一个非常非常');
+  assert.equal(sanitizeTitle('😀😀😀😀😀abcdef'), '😀😀😀😀😀abc');
+  // 空 / 纯标点 → null（调用方静默降级，保持首条消息标题）。
+  assert.equal(sanitizeTitle(''), null);
+  assert.equal(sanitizeTitle('   '), null);
+  assert.equal(sanitizeTitle('「」'), null);
 });
 
 test('getSessionSnapshot：env 优先于 .pi/config.json（快照 model 字段来自 env）', async () => {

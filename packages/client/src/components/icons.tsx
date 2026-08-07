@@ -90,6 +90,16 @@ export function IconCopy(props: IconProps) {
   );
 }
 
+/** 放大镜：会话搜索框。 */
+export function IconSearch(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </Icon>
+  );
+}
+
 /** 叉号：取消重命名 / 关闭。 */
 export function IconX(props: IconProps) {
   return (
