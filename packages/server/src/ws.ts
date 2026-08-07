@@ -4,6 +4,7 @@ import type { WebSocket } from 'ws';
 import {
   abortRun,
   agentEvents,
+  conversationUpdated,
   getSessionSnapshot,
   resolveDefaultConversationId,
   sendPrompt,
@@ -87,6 +88,10 @@ function attachAgentForwarding(): void {
   agentForwardingAttached = true;
   agentEvents.subscribe(({ conversationId, event }) => wsHub.broadcast('agent_event', event, conversationId));
   sessionStates.subscribe(({ conversationId, state }) => wsHub.broadcast('session', state, conversationId));
+  // 自动命名完成后广播新标题 → 客户端刷新会话列表（侧栏标题变为短摘要）。
+  conversationUpdated.subscribe(({ conversationId, name }) =>
+    wsHub.broadcast('conversation_updated', { name }, conversationId),
+  );
 }
 
 /**

@@ -55,6 +55,11 @@ export function useChat(conversationId: string | null, onSettled?: () => void) {
   useEffect(() => {
     if (!lastMessage) return;
     const envelope = lastMessage as WsEnvelope & { conversationId?: string };
+    // 会话元信息变化（自动命名完成后下发新标题）：任何会话都触发列表刷新，不受当前会话过滤。
+    if (envelope.type === 'conversation_updated') {
+      onSettledRef.current?.();
+      return;
+    }
     if (envelope.conversationId && envelope.conversationId !== conversationId) return;
     if (envelope.type === 'session') {
       dispatch({ type: 'snapshot', snapshot: envelope.payload as AgentStateSnapshot });
