@@ -1,4 +1,13 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import { useChat } from '../hooks/useChat';
 import { useTypewriter } from '../hooks/useTypewriter';
 import {
@@ -21,6 +30,9 @@ import {
   IconMenu,
   IconMessageSquare,
   IconMic,
+  IconPencil,
+  IconRefresh,
+  IconRetry,
   IconX,
   type IconProps,
 } from '../components/icons';
@@ -155,8 +167,50 @@ function MessageCopyButton({ text }: { text: string }) {
   );
 }
 
-/** 单条消息气泡。 */
-function MessageBubble({ item }: { item: ChatItem }) {
+/** 消息操作按钮（编辑/重新生成/重试）：hover 显示，样式与复制按钮一致。 */
+function MessageActionButton({
+  onClick,
+  title,
+  disabled,
+  children,
+}: {
+  onClick: () => void;
+  title: string;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      className="mt-1 shrink-0 rounded-md p-1 text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-200/70 hover:text-neutral-700 focus:opacity-100 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * 单条消息气泡。
+ *
+ * 重放能力：user 消息 hover 出现「编辑」、assistant 消息 hover 出现「重新生成」、
+ * 失败轮次出现「重试」。三者都以 replayTarget（user 消息的 entryId）为分支点触发
+ * onReplay；重放期间（replaying）不渲染操作按钮，避免竞态。
+ */
+function MessageBubble({
+  item,
+  onReplay,
+  replaying,
+  replayTarget,
+}: {
+  item: ChatItem;
+  onReplay: (entryId: string, text?: string) => boolean;
+  replaying: boolean;
+  replayTarget: string | null;
+}) {
   // 打字机式流式浮现：仅实时流式的助手消息有逐字 reveal + 块状光标；
   // 历史回显 / 已完成的用户与助手消息（含 abort 后）直接全文停驻、无光标。
   // 助手消息的 display 是 markdown 源文本的 reveal 进度，渲染层按该进度渲染富文本
@@ -164,6 +218,9 @@ function MessageBubble({ item }: { item: ChatItem }) {
   const typewriting = item.role === 'assistant' && item.status === 'streaming';
   const { display, showCursor } = useTypewriter(item.text, typewriting);
   const cursorRef = useRef<HTMLSpanElement>(null);
+  // 内联编辑态：编辑框草稿文本。
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(item.text);
 
   // 流式期间保持光标在可视区内：reveal 推进把光标推出滚动容器外时滚动回视。
   useEffect(() => {
@@ -172,10 +229,83 @@ function MessageBubble({ item }: { item: ChatItem }) {
     }
   }, [showCursor, display]);
 
+  // 重放期间禁止编辑/重新生成/重试（竞态守卫）；无重放目标（entryId 未同步）时按钮不出现。
+  const canReplay = Boolean(replayTarget) && !replaying;
+  const showEdit = item.role === 'user' && item.status === 'done' && canReplay;
+  const showRegenerate = item.role === 'assistant' && item.status === 'done' && !item.error && canReplay;
+  const showRetry = item.role === 'assistant' && item.status === 'error' && canReplay;
+
+  /** 保存编辑：新文本触发重放；成功触发后收起编辑框。 */
+  const handleSaveEdit = () => {
+    const trimmed = draft.trim();
+    if (!trimmed || replaying || !replayTarget) return;
+    if (onReplay(replayTarget, trimmed)) setEditing(false);
+  };
+
   if (item.role === 'user') {
+    if (editing) {
+      return (
+        <div className="group flex items-start justify-end gap-1">
+          <div className="max-w-[85%] min-w-0 rounded-2xl rounded-tr-sm border border-neutral-300 bg-white px-3 py-2">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setEditing(false);
+                }
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSaveEdit();
+                }
+              }}
+              rows={Math.min(12, Math.max(2, draft.split('\n').length))}
+              autoFocus
+              aria-label="编辑消息"
+              className="w-full resize-y rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm leading-relaxed text-neutral-900 outline-none focus:border-neutral-500"
+            />
+            <div className="mt-1.5 flex items-center justify-end gap-1">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                title="取消编辑"
+                aria-label="取消编辑"
+                className="rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-200/70 hover:text-neutral-700"
+              >
+                <IconX className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={!draft.trim() || replaying}
+                title="保存并重新生成"
+                aria-label="保存并重新生成"
+                className="rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-200/70 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <IconCheck className="h-4 w-4 text-emerald-600" />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="group flex items-start justify-end gap-1">
-        <MessageCopyButton text={item.text} />
+        <div className="flex shrink-0 items-center gap-0.5">
+          {showEdit && (
+            <MessageActionButton
+              onClick={() => {
+                setDraft(item.text);
+                setEditing(true);
+              }}
+              title="编辑并重新生成"
+            >
+              <IconPencil className="h-3.5 w-3.5" />
+            </MessageActionButton>
+          )}
+          <MessageCopyButton text={item.text} />
+        </div>
         <div className="max-w-[85%] min-w-0 rounded-2xl rounded-tr-sm bg-neutral-900 px-4 py-2.5 text-sm leading-relaxed text-white whitespace-pre-wrap">
           {item.text}
         </div>
@@ -215,7 +345,19 @@ function MessageBubble({ item }: { item: ChatItem }) {
 
         {item.error && <p className="mt-1 text-xs text-red-600">出错：{item.error}</p>}
       </div>
-      {item.text && <MessageCopyButton text={item.text} />}
+      <div className="flex shrink-0 items-center gap-0.5">
+        {showRegenerate && (
+          <MessageActionButton onClick={() => replayTarget && onReplay(replayTarget)} title="重新生成">
+            <IconRefresh className="h-3.5 w-3.5" />
+          </MessageActionButton>
+        )}
+        {showRetry && (
+          <MessageActionButton onClick={() => replayTarget && onReplay(replayTarget)} title="重试">
+            <IconRetry className="h-3.5 w-3.5" />
+          </MessageActionButton>
+        )}
+        {item.text && <MessageCopyButton text={item.text} />}
+      </div>
     </div>
   );
 }
@@ -298,8 +440,10 @@ export default function ChatPage() {
     wsStatus,
     canSend,
     historyLoading,
+    replaying,
     sendMessage,
     abort,
+    replay,
   } = chat;
 
   const streaming = status === 'streaming';
@@ -382,9 +526,11 @@ export default function ChatPage() {
     ? '请先在左侧新建会话'
     : historyLoading
       ? '正在加载会话历史…'
-      : canSend
-        ? '输入消息，Enter 发送，Shift+Enter 换行。运行中发送会自动排队。'
-        : 'WebSocket 未连接…';
+      : replaying
+        ? '正在重新生成，完成后可继续对话…'
+        : canSend
+          ? '输入消息，Enter 发送，Shift+Enter 换行。运行中发送会自动排队。'
+          : 'WebSocket 未连接…';
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] min-h-[24rem] gap-4">
@@ -470,9 +616,27 @@ export default function ChatPage() {
               )}
             </div>
           )}
-          {items.map((item) => (
-            <MessageBubble key={item.id} item={item} />
-          ))}
+          {items.map((item, i) => {
+            // 重放分支点：本条 user → 自身 entryId；本条 assistant → 紧邻其前置的 user 的
+            // entryId（重新生成/重试 = 重跑产出该回复的那一轮）。不往前回退：前置 user 的
+            // entryId 未同步（实时流式刚结束、syncEntries 未返回）时按钮不出现，而不是错误地
+            // 重放更早的一轮。
+            let replayTarget: string | null = null;
+            if (item.role === 'user') {
+              replayTarget = item.entryId;
+            } else if (i > 0 && items[i - 1].role === 'user') {
+              replayTarget = items[i - 1].entryId;
+            }
+            return (
+              <MessageBubble
+                key={item.id}
+                item={item}
+                onReplay={replay}
+                replaying={replaying}
+                replayTarget={replayTarget}
+              />
+            );
+          })}
           {queued.length > 0 && (
             <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
               已排队 {queued.length} 条消息，将在当前运行结束后处理。

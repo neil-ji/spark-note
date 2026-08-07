@@ -6,6 +6,7 @@ import {
   agentEvents,
   conversationUpdated,
   getSessionSnapshot,
+  replayConversation,
   resolveDefaultConversationId,
   sendPrompt,
   sessionStates,
@@ -53,7 +54,8 @@ export type WsClientMessage =
   | { type: 'echo'; payload?: unknown }
   | { type: 'broadcast'; payload?: unknown }
   | { type: 'chat'; payload?: { text?: unknown; conversationId?: unknown } }
-  | { type: 'abort'; payload?: { conversationId?: unknown } };
+  | { type: 'abort'; payload?: { conversationId?: unknown } }
+  | { type: 'replay'; payload?: { conversationId?: unknown; entryId?: unknown; text?: unknown } };
 
 /** 提取 chat 消息文本，非字符串返回空串。 */
 function chatText(payload: unknown): string {
@@ -71,6 +73,19 @@ function extractConversationId(payload: unknown): string | undefined {
     typeof (payload as { conversationId?: unknown }).conversationId === 'string'
   ) {
     const id = (payload as { conversationId?: unknown }).conversationId as string;
+    return id.trim() || undefined;
+  }
+  return undefined;
+}
+
+/** 从消息 payload 提取 SDK 会话条目 id（重放目标）；非空字符串返回，否则 undefined。 */
+function extractEntryId(payload: unknown): string | undefined {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    typeof (payload as { entryId?: unknown }).entryId === 'string'
+  ) {
+    const id = (payload as { entryId?: unknown }).entryId as string;
     return id.trim() || undefined;
   }
   return undefined;
@@ -157,6 +172,25 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
         case 'abort': {
           const targetConversationId = extractConversationId(message.payload);
           abortRun(targetConversationId).catch((err) =>
+            wsHub.broadcast('error', { message: errMessage(err) }, targetConversationId),
+          );
+          break;
+        }
+        case 'replay': {
+          // 截断重放：编辑 user 消息（带 text）或重新生成/重试 assistant 回复（无 text）。
+          // 流式事件仍经 agent_event 广播，客户端收到后照常折叠；错误帧带会话 id 供过滤。
+          const targetConversationId = extractConversationId(message.payload);
+          const entryId = extractEntryId(message.payload);
+          const text = chatText(message.payload);
+          if (!targetConversationId) {
+            wsHub.send(socket, 'error', { message: 'replay requires conversationId' });
+            break;
+          }
+          if (!entryId) {
+            wsHub.send(socket, 'error', { message: 'replay requires entryId' }, targetConversationId);
+            break;
+          }
+          replayConversation(targetConversationId, entryId, text).catch((err) =>
             wsHub.broadcast('error', { message: errMessage(err) }, targetConversationId),
           );
           break;

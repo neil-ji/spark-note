@@ -109,8 +109,9 @@ export interface Conversation {
   preview: string;
 }
 
-/** 会话历史消息（role + text，服务端从 JSONL 提取）。 */
+/** 会话历史消息（id 为 SDK 会话条目 id，编辑/重新生成/重试的重放目标；服务端只返回活动分支）。 */
 export interface ConversationMessage {
+  id: string;
   role: string;
   text: string;
 }
