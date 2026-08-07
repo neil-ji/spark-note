@@ -35,3 +35,6 @@ export const WRITING_DNA_DIR =
 
 /** 对话会话目录（.pi/sessions/，JSONL 落盘），可用 PI_SESSION_DIR 覆盖（测试/部署用）。 */
 export const SESSION_DIR = process.env.PI_SESSION_DIR ?? path.join(REPO_ROOT, '.pi', 'sessions');
+
+/** 提示词模板目录（.pi/prompts/*.md），喂给 SDK DefaultResourceLoader 的 additionalPromptTemplatePaths。 */
+export const PROMPT_TEMPLATES_DIR = path.join(REPO_ROOT, '.pi', 'prompts');

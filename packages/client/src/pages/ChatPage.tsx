@@ -1,17 +1,29 @@
-import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useChat } from '../hooks/useChat';
 import { useTypewriter } from '../hooks/useTypewriter';
 import {
   createConversation,
   deleteConversation,
+  getPromptTemplates,
   listConversations,
   renameConversation,
   type Conversation,
+  type PromptTemplate,
 } from '../lib/api';
 import type { ChatItem, ToolCallItem } from '../lib/chat';
 import { Markdown } from '../lib/markdown';
 import { copyTextToClipboard } from '../lib/clipboard';
-import { IconCheck, IconCopy, IconMenu, IconX } from '../components/icons';
+import {
+  IconCheck,
+  IconCopy,
+  IconFileText,
+  IconGlobe,
+  IconMenu,
+  IconMessageSquare,
+  IconMic,
+  IconX,
+  type IconProps,
+} from '../components/icons';
 import ConversationSidebar from '../components/ConversationSidebar';
 
 /**
@@ -46,6 +58,13 @@ const AGENT_STYLE: Record<string, string> = {
   idle: 'bg-emerald-100 text-emerald-700',
   streaming: 'bg-sky-100 text-sky-700 animate-pulse',
   error: 'bg-red-100 text-red-700',
+};
+
+/** / 菜单模板图标映射（icons.tsx SVG，禁止 emoji）；未知模板回退文件图标。 */
+const TEMPLATE_ICON: Record<string, ComponentType<IconProps>> = {
+  'tingguo-weekly': IconMic,
+  'write-xiaohongshu': IconMessageSquare,
+  'github-trending': IconGlobe,
 };
 
 /** 工具调用卡片：名称徽标 + 参数（可折叠）+ 运行/结果状态。 */
@@ -209,7 +228,12 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   // 窄屏（<md）下侧栏作为抽屉：true 时叠加层 + 侧栏浮现。
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // / 菜单：模板列表 + 键盘高亮索引 + 插入模板后选中占位文本（argumentHint）供直接覆盖。
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [menuHighlight, setMenuHighlight] = useState(0);
+  const [selectionRange, setSelectionRange] = useState<[number, number] | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /** 重新拉取会话列表（新建 / 重命名 / 删除 / 一轮对话落盘后刷新标题与时间）。 */
   const refreshConversations = useCallback(async (): Promise<Conversation[]> => {
@@ -238,6 +262,31 @@ export default function ChatPage() {
     };
   }, []);
 
+  // 加载 / 菜单模板元信息（失败静默：无模板条目时菜单自然为空，不影响聊天）。
+  useEffect(() => {
+    let cancelled = false;
+    getPromptTemplates()
+      .then(({ templates }) => {
+        if (!cancelled) setTemplates(templates);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 选中模板后：聚焦输入框并选中占位文本（argumentHint），用户可直接输入覆盖。
+  useEffect(() => {
+    if (!selectionRange) return;
+    const el = textareaRef.current;
+    // disabled 时 setSelectionRange 是空操作（连接掉线等边界），静默跳过。
+    if (el && !el.disabled) {
+      el.focus();
+      el.setSelectionRange(selectionRange[0], selectionRange[1]);
+    }
+    setSelectionRange(null);
+  }, [selectionRange]);
+
   const chat = useChat(activeId, refreshConversations);
   const {
     items,
@@ -254,6 +303,26 @@ export default function ChatPage() {
   } = chat;
 
   const streaming = status === 'streaming';
+
+  // / 菜单：输入以 / 开头即弹出；按斜杠后的前缀过滤模板。
+  const menuOpen = input.startsWith('/');
+  const menuQuery = input.slice(1).trim().toLowerCase();
+  const menuItems = useMemo(() => {
+    if (!menuQuery) return templates;
+    return templates.filter((t) => t.name.toLowerCase().includes(menuQuery));
+  }, [templates, menuQuery]);
+  // 高亮索引夹到有效范围（过滤后列表变短时不会越界）。
+  const menuActive = Math.min(menuHighlight, Math.max(0, menuItems.length - 1));
+
+  /** 选择模板：插入 /name <argumentHint>，并选中占位文本供直接输入覆盖。 */
+  const selectTemplate = useCallback((t: PromptTemplate) => {
+    const hint = t.argumentHint ? ` ${t.argumentHint}` : '';
+    const value = `/${t.name}${hint}`;
+    setInput(value);
+    setSelectionRange(
+      hint ? [value.length - t.argumentHint!.length, value.length] : [value.length, value.length],
+    );
+  }, []);
 
   // 新内容到达时滚动到底部（scrollIntoView 兜底，兼容窄屏 min-h 下内部不滚动的流式布局）。
   useEffect(() => {
@@ -396,6 +465,7 @@ export default function ChatPage() {
                   <p className="text-sm text-neutral-400">发一条消息开始对话，例如：</p>
                   <p className="mt-2 text-sm text-neutral-500">「GitHub trending 这周有什么好项目？」</p>
                   <p className="text-sm text-neutral-500">「用 tingguo-weekly 产出一期《听过》周刊」</p>
+                  <p className="mt-3 text-xs text-neutral-400">在输入框输入 / 弹出技能菜单，选择模板快速开始</p>
                 </>
               )}
             </div>
@@ -415,22 +485,95 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* 输入区 */}
+        {/* 输入区：/ 弹出技能模板菜单（绝对定位在输入框上方） */}
         <div className="flex items-end gap-2">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            rows={2}
-            placeholder={placeholder}
-            disabled={!canSend}
-            className="flex-1 resize-none rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 disabled:opacity-50"
-          />
+          <div className="relative flex-1">
+            {menuOpen && menuItems.length > 0 && (
+              <div
+                role="listbox"
+                aria-label="技能模板"
+                className="absolute bottom-full left-0 right-0 z-10 mb-2 max-h-64 overflow-y-auto rounded-lg border border-neutral-200 bg-white shadow-lg"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {menuItems.map((t, i) => {
+                  const TemplateIcon = TEMPLATE_ICON[t.name] ?? IconFileText;
+                  const isActive = i === menuActive;
+                  return (
+                    <button
+                      key={t.name}
+                      type="button"
+                      role="option"
+                      id={`template-option-${t.name}`}
+                      aria-selected={isActive}
+                      onClick={() => selectTemplate(t)}
+                      onMouseEnter={() => setMenuHighlight(i)}
+                      className={`flex w-full items-start gap-2.5 px-3 py-2 text-left ${isActive ? 'bg-neutral-100' : ''}`}
+                    >
+                      <TemplateIcon
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${isActive ? 'text-neutral-900' : 'text-neutral-400'}`}
+                      />
+                      <span className="min-w-0">
+                        <span className={`block font-mono text-sm font-semibold ${isActive ? 'text-neutral-900' : 'text-neutral-800'}`}>
+                          /{t.name}
+                        </span>
+                        <span className="block text-xs leading-snug text-neutral-500">{t.description}</span>
+                        {t.argumentHint && (
+                          <span className="mt-1 inline-block rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] text-neutral-500">
+                            例：{t.argumentHint}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setMenuHighlight(0);
+              }}
+              onKeyDown={(e) => {
+                // / 菜单打开时：↑/↓ 移动高亮、Enter 选择、Esc 清空收起；否则原 Enter 发送。
+                if (menuOpen && menuItems.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setMenuHighlight((h) => (h + 1) % menuItems.length);
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setMenuHighlight((h) => (h - 1 + menuItems.length) % menuItems.length);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setInput('');
+                    return;
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    selectTemplate(menuItems[menuActive]);
+                    return;
+                  }
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              rows={2}
+              placeholder={placeholder}
+              disabled={!canSend}
+              aria-label="消息输入"
+              aria-autocomplete="list"
+              aria-expanded={menuOpen && menuItems.length > 0}
+              aria-activedescendant={menuOpen && menuItems.length > 0 ? `template-option-${menuItems[menuActive]?.name}` : undefined}
+              className="w-full resize-none rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 disabled:opacity-50"
+            />
+          </div>
           <button
             onClick={handleSend}
             disabled={!canSend || !input.trim()}
