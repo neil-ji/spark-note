@@ -192,3 +192,31 @@ test('WS 握手缺省：无任何会话时 conversation 为 null（首个消息�
     await clearSessionDir();
   }
 });
+
+test('chat 空文本错误帧携带 conversationId（P2-8），客户端可按会话过滤', async () => {
+  try {
+    const id = await createSessionWithMessage('empty-text target');
+    const app = (await buildServer()) as AppWithInjectWS;
+    try {
+      await app.ready();
+      const { ws, envelopes } = await connectWS(app, `/ws?conversation=${id}`);
+      try {
+        await waitForEnvelope(envelopes, 'conversation');
+        // 等 session 帧：ws.ts 的 message 监听器在 getSessionSnapshot 之后才挂载，
+        // 过早发送 chat 会因监听器未挂载而丢失（injectWS 下无 socket-level 缓冲语义保证）。
+        await waitForEnvelope(envelopes, 'session');
+        // 空文本 chat → error 帧应带上目标会话 id，供客户端区分错误归属
+        ws.send(JSON.stringify({ type: 'chat', payload: { text: '   ', conversationId: id } }));
+        const err = await waitForEnvelope(envelopes, 'error');
+        assert.equal(err.payload.message, 'empty chat text', '应报空文本错误');
+        assert.equal(err.conversationId, id, '错误帧应携带目标 conversationId');
+      } finally {
+        ws.terminate();
+      }
+    } finally {
+      await app.close();
+    }
+  } finally {
+    await clearSessionDir();
+  }
+});
