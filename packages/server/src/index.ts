@@ -9,6 +9,7 @@ import { registerWritingDnaRoutes } from './routes/writing-dna.js';
 import { registerContentRoutes } from './routes/content.js';
 import { registerConfigRoutes } from './routes/config.js';
 import { registerConversationRoutes } from './routes/conversations.js';
+import { registerPromptTemplateRoutes } from './routes/prompt-templates.js';
 import { getAgentRuntime } from './agent.js';
 
 /** 组装 Fastify 实例：健康检查 API、WebSocket 基础设施、Writing DNA 数据 API、前端静态资源托管。 */
@@ -39,6 +40,9 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // 会话管理 API（GET/POST /api/conversations，GET messages / PATCH / DELETE by id；JSONL 持久化）
   await registerConversationRoutes(app);
+
+  // 提示词模板 API（GET /api/prompt-templates → 前端 / 菜单元信息）
+  await registerPromptTemplateRoutes(app);
 
   // 静态资源服务：托管前端 build 产物（packages/client/dist）。
   // dev 模式下由 Vite dev server 提供页面；仅 build 后 dist 存在时才注册。

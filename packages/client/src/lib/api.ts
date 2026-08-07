@@ -145,6 +145,24 @@ export async function getConversationMessages(
   return (await res.json()) as { id: string; name: string; messages: ConversationMessage[] };
 }
 
+/* ---- 提示词模板 API ---- */
+
+/** 模板元信息（/ 菜单数据源；正文只在服务端 /name 展开，不下发前端）。 */
+export interface PromptTemplate {
+  name: string;
+  description: string;
+  argumentHint?: string;
+}
+
+/** 获取全部 SKILL 模板元信息（GET /api/prompt-templates）。 */
+export async function getPromptTemplates(): Promise<{ templates: PromptTemplate[] }> {
+  const res = await fetch('/api/prompt-templates');
+  if (!res.ok) {
+    throw new Error(`get prompt templates failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as { templates: PromptTemplate[] };
+}
+
 /** 重命名会话。 */
 export async function renameConversation(id: string, name: string): Promise<{ id: string; name: string }> {
   const res = await fetch(`/api/conversations/${encodeURIComponent(id)}`, {

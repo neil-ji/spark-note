@@ -11,7 +11,7 @@ import {
   type SessionEntry,
   type SessionMessageEntry,
 } from '@earendil-works/pi-coding-agent';
-import { REPO_ROOT, SESSION_DIR } from './repo-paths.js';
+import { REPO_ROOT, SESSION_DIR, PROMPT_TEMPLATES_DIR } from './repo-paths.js';
 import { getEffectiveConfig } from './provider-config.js';
 
 /**
@@ -410,11 +410,13 @@ async function createRuntime(targetConversationId?: string): Promise<{ runtime: 
     throw new Error(`未找到可用的 ${cfg.provider} 模型（modelId=${cfg.modelId}）`);
   }
 
-  // 3. 资源加载器 —— 合并 .claude/skills 下 3 个 SKILL（tingguo-weekly 等），零格式改动。
+  // 3. 资源加载器 —— 合并 .claude/skills 下 3 个 SKILL（tingguo-weekly 等），零格式改动；
+  //    额外加载 .pi/prompts/ 提示词模板（/name 命令展开，见 prompt-templates.ts）。
   const fromClaude = loadSkillsFromDir({ dir: SKILLS_DIR, source: 'claude-skills' });
   const loader = new DefaultResourceLoader({
     cwd: REPO_ROOT,
     agentDir: getAgentDir(),
+    additionalPromptTemplatePaths: [PROMPT_TEMPLATES_DIR],
     skillsOverride: (base) => {
       const names = new Set(base.skills.map((s) => s.name));
       const merged = [...base.skills];
@@ -535,7 +537,11 @@ export function getAgentRuntime(conversationId?: string): Promise<AgentRuntime> 
 export async function sendPrompt(text: string, conversationId?: string): Promise<void> {
   const runtime = await getAgentRuntime(conversationId);
   activeConversationId = runtime.conversationId;
-  const opts = runtime.session.isStreaming ? { streamingBehavior: 'followUp' as const } : undefined;
+  // expandPromptTemplates 显式开启：/name args 消息展开为 .pi/prompts/ 模板全文（SDK 默认即 true，显式声明意图）。
+  const opts = {
+    ...(runtime.session.isStreaming ? { streamingBehavior: 'followUp' as const } : {}),
+    expandPromptTemplates: true as const,
+  };
   await runtime.session.prompt(text, opts);
 }
 
