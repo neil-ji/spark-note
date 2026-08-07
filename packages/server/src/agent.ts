@@ -387,9 +387,12 @@ async function createRuntime(targetConversationId?: string): Promise<{ runtime: 
   }
 
   // 2. 凭据显式注入（env 优先，内存态不落盘）。env 缺失时 SDK DefaultAuthStorage 兜底读 auth.json。
+  //    第三参 { allowNetwork: false }：setRuntimeApiKey 内部 refresh 的 allowNetwork 默认取
+  //    modelNetworkEnabled（PI_OFFLINE 未设时 true），会强制联网拉模型列表并可能无限挂起
+  //    （受限网络）；显式禁用后 refresh 走 .pi/models-store.json 缓存，不联网。
   const apiKey = resolveAnthropicApiKey();
   if (apiKey) {
-    await modelRuntime.setRuntimeApiKey(cfg.provider, apiKey);
+    await modelRuntime.setRuntimeApiKey(cfg.provider, apiKey, { allowNetwork: false });
   }
 
   // 凭据校验：env + auth.json 均无 anthropic 凭据 → 显式报错，不静默运行。
