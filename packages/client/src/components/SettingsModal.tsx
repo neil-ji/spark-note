@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getConfig, saveConfig, type ConfigResponse } from '../lib/api';
+import { IconX } from './icons';
 
 const THINKING_LEVELS = ['off', 'low', 'medium', 'high'] as const;
 
@@ -113,7 +114,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             className="rounded px-2 text-neutral-400 hover:text-neutral-700"
             aria-label="关闭"
           >
-            ✕
+            <IconX className="h-4 w-4" />
           </button>
         </div>
 

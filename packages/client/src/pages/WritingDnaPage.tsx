@@ -7,6 +7,7 @@ import {
   type DnaDocDetail,
   type DnaDocMeta,
 } from '../lib/api';
+import { IconDna, IconListChecks } from '../components/icons';
 
 /** 规则对照清单勾选状态：按规则稳定 id 持久化到 localStorage。 */
 const CHECKLIST_STORAGE_KEY = 'spark-note.writing-dna.checked';
@@ -197,7 +198,7 @@ function ChecklistPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-            <span aria-hidden>✅</span> 规则对照清单
+            <IconListChecks className="h-4 w-4" /> 规则对照清单
             <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
               {done}/{total}
             </span>
@@ -404,7 +405,7 @@ export default function WritingDnaPage() {
           <section className="rounded-xl border border-neutral-200 bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-                <span aria-hidden>🧬</span> 结构化渲染
+                <IconDna className="h-4 w-4" /> 结构化渲染
               </h3>
               <span className="font-mono text-xs text-neutral-400">
                 {doc.fileName} · {doc.blocks.length} 块
