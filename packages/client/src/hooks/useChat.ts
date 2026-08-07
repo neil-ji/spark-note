@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { useWebSocket, type WsEnvelope } from './useWebSocket';
 import { getConversationMessages } from '../lib/api';
 import {
@@ -19,6 +19,8 @@ export function useChat(conversationId: string | null, onSettled?: () => void) {
   const path = conversationId ? `/ws?conversation=${encodeURIComponent(conversationId)}` : '/ws';
   const { status: wsStatus, lastMessage, send } = useWebSocket(path);
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
+  // 历史消息加载中：期间禁止发送，避免「先发后 load history 覆盖」的竞态（P2-4）。
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // onSettled 用 ref 保存，避免其身份变化触发事件消费 effect 重跑（重放 lastMessage）。
   const onSettledRef = useRef(onSettled);
@@ -29,16 +31,20 @@ export function useChat(conversationId: string | null, onSettled?: () => void) {
   // 切换会话：清空聊天区，并从 REST 加载该会话历史消息。
   useEffect(() => {
     let cancelled = false;
-    dispatch({ type: 'reset' });
+    dispatch({ type: 'reset', conversationId });
     if (!conversationId) return;
+    setHistoryLoading(true);
     getConversationMessages(conversationId)
       .then(({ messages }) => {
-        if (!cancelled) dispatch({ type: 'history', messages });
+        if (!cancelled) dispatch({ type: 'history', conversationId, messages });
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         const message = e instanceof Error ? e.message : String(e);
         dispatch({ type: 'event', event: { kind: 'agent_error', message: `加载历史消息失败：${message}` } });
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
       });
     return () => {
       cancelled = true;
@@ -65,7 +71,8 @@ export function useChat(conversationId: string | null, onSettled?: () => void) {
     }
   }, [lastMessage, conversationId]);
 
-  const canSend = wsStatus === 'open' && Boolean(conversationId);
+  // 历史加载期间禁止发送（canSend=false），从根上杜绝「history 覆盖已发消息」竞态。
+  const canSend = wsStatus === 'open' && Boolean(conversationId) && !historyLoading;
 
   /** 发送一条用户消息到当前会话；未连接或无会话时不动作。流式期间后端会自动 followUp 排队。 */
   const sendMessage = (text: string) => {
@@ -81,5 +88,5 @@ export function useChat(conversationId: string | null, onSettled?: () => void) {
     send('abort', conversationId ? { conversationId } : undefined);
   };
 
-  return { ...state, wsStatus, canSend, sendMessage, abort };
+  return { ...state, wsStatus, canSend, historyLoading, sendMessage, abort };
 }

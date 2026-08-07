@@ -1,4 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { copyTextToClipboard } from './clipboard';
 
 /**
  * 零依赖 Markdown 结构化渲染器。
@@ -269,16 +270,25 @@ export function renderInline(text: string): ReactNode[] {
 // ---------- 块级渲染 ----------
 
 function CodeBlockView({ lang, code }: { lang: string; code: string }) {
-  const [copied, setCopied] = useState(false);
+  // P2-7：与消息气泡复制共用 copyTextToClipboard（clipboard 优先 + execCommand 降级），
+  // 双路径都失败时明确提示「复制失败」，不再静默吞掉。
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const timerRef = useRef<number | null>(null);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    } catch {
-      // 剪贴板权限不可用时静默降级，不打断阅读
-    }
+  // 卸载时清理计时器，避免卸载后 setState。
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  const handleCopy = () => {
+    void copyTextToClipboard(code).then((ok) => {
+      setCopyState(ok ? 'copied' : 'failed');
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setCopyState('idle'), 1200);
+    });
   };
 
   return (
@@ -290,9 +300,10 @@ function CodeBlockView({ lang, code }: { lang: string; code: string }) {
         <button
           type="button"
           onClick={handleCopy}
+          title={copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制代码'}
           className="rounded px-2 py-0.5 text-[11px] font-medium text-neutral-400 transition-colors hover:bg-white/10 hover:text-neutral-100"
         >
-          {copied ? '已复制' : '复制'}
+          {copyState === 'copied' ? '已复制' : copyState === 'failed' ? '复制失败' : '复制'}
         </button>
       </div>
       <pre className="min-h-[3rem] overflow-x-auto p-3 text-[13px] leading-relaxed text-neutral-100">

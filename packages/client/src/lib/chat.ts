@@ -52,6 +52,8 @@ export interface ChatItem {
 }
 
 export interface ChatState {
+  /** 当前会话 id（null = 尚未切换 / 无会话）；reset/history 据此识别历史消息归属，防串会话。 */
+  conversationId: string | null;
   items: ChatItem[];
   /** 当前正在流式构建的助手消息下标；无则 null。 */
   currentIdx: number | null;
@@ -68,6 +70,7 @@ export interface ChatState {
 }
 
 export const initialChatState: ChatState = {
+  conversationId: null,
   items: [],
   currentIdx: null,
   pendingToolArgs: '',
@@ -82,8 +85,8 @@ export type ChatAction =
   | { type: 'send'; text: string }
   | { type: 'snapshot'; snapshot: AgentStateSnapshot }
   | { type: 'event'; event: AgentWsEvent }
-  | { type: 'reset' }
-  | { type: 'history'; messages: { role: string; text: string }[] };
+  | { type: 'reset'; conversationId: string | null }
+  | { type: 'history'; conversationId: string | null; messages: { role: string; text: string }[] };
 
 function newId(): string {
   return crypto.randomUUID();
@@ -150,8 +153,9 @@ function applyEvent(state: ChatState, e: AgentWsEvent): ChatState {
       return state;
 
     case 'message_end':
+      // P2-5：收尾同时清掉 currentIdx，避免迟到的 message_end 命中已换会话/已完成的消息。
       if (e.role === 'assistant' && state.currentIdx != null) {
-        return withItem(state, state.currentIdx, { status: 'done' });
+        return { ...withItem(state, state.currentIdx, { status: 'done' }), currentIdx: null };
       }
       return state;
 
@@ -217,11 +221,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'event':
       return applyEvent(state, action.event);
     case 'reset':
-      // 切换会话：清空为初始态（历史消息随后由 history 填充）。
-      return initialChatState;
+      // 切换会话：清空为初始态并记下目标会话 id（历史消息随后由 history 填充）。
+      return { ...initialChatState, conversationId: action.conversationId ?? null };
     case 'history': {
-      // 已有消息（用户已发送 / 正在流式）时不覆盖，避免竞态丢失会话内消息。
-      if (state.items.length > 0) return state;
+      // P2-4：仅当历史消息属于当前会话时才应用——迟到 / 串会话的 history 一律丢弃
+      // （此前以 items 非空为条件，切换会话加载历史会覆盖刚发送的消息，造成竞态）。
+      if (state.conversationId !== action.conversationId) return state;
       const items: ChatItem[] = action.messages.map((m) => ({
         id: newId(),
         role: m.role === 'assistant' ? 'assistant' : 'user',

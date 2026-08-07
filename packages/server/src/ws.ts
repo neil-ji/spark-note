@@ -136,23 +136,26 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           wsHub.broadcast('broadcast', message.payload ?? null);
           break;
         case 'chat': {
+          const targetConversationId = extractConversationId(message.payload);
           const text = chatText(message.payload);
           if (!text.trim()) {
-            wsHub.send(socket, 'error', { message: 'empty chat text' });
+            // P2-8：错误帧带会话 id，客户端据此过滤，避免错误串到其他会话。
+            wsHub.send(socket, 'error', { message: 'empty chat text' }, targetConversationId);
             break;
           }
-          const targetConversationId = extractConversationId(message.payload);
           // 不阻塞消息循环：prompt 期间 socket 仍能收到 abort。
           sendPrompt(text, targetConversationId).catch((err) =>
-            wsHub.broadcast('error', { message: errMessage(err) }),
+            wsHub.broadcast('error', { message: errMessage(err) }, targetConversationId),
           );
           break;
         }
-        case 'abort':
-          abortRun(extractConversationId(message.payload)).catch((err) =>
-            wsHub.broadcast('error', { message: errMessage(err) }),
+        case 'abort': {
+          const targetConversationId = extractConversationId(message.payload);
+          abortRun(targetConversationId).catch((err) =>
+            wsHub.broadcast('error', { message: errMessage(err) }, targetConversationId),
           );
           break;
+        }
         default:
           wsHub.send(socket, 'error', { message: `unknown type: ${String(message.type)}` });
       }

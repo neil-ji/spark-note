@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getConfig, saveConfig, type ConfigResponse } from '../lib/api';
 import { IconX } from './icons';
 
@@ -36,6 +36,64 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [baseUrl, setBaseUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  // ---- P2-2 无障碍：初始焦点 / Escape 关闭 / Tab 焦点陷阱 ----
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  /** 弹窗内可聚焦元素（禁用的跳过），供初始焦点与焦点陷阱使用。 */
+  const focusableItems = (): HTMLElement[] => {
+    const dialog = dialogRef.current;
+    if (!dialog) return [];
+    return Array.from(
+      dialog.querySelectorAll<HTMLElement>('button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])'),
+    ).filter((el) => !el.hasAttribute('disabled'));
+  };
+
+  // 打开时：初始焦点落在第一个可聚焦控件；关闭时：焦点还给打开前的元素。
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const items = focusableItems();
+    (items[0] ?? dialogRef.current)?.focus();
+    return () => {
+      previouslyFocused?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Escape 关闭（捕获阶段，避免被弹窗内元素拦截）+ Tab 焦点在弹窗内循环（焦点陷阱）。
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusableItems();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || !dialogRef.current?.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !dialogRef.current?.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // 每次打开时重新拉取服务端配置（保证来源说明与值一致）。
   useEffect(() => {
@@ -102,9 +160,11 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
         aria-label="Provider / Model 配置"
       >
         <div className="mb-4 flex items-center justify-between">

@@ -99,6 +99,17 @@ export function IconX(props: IconProps) {
   );
 }
 
+/** 菜单：窄屏打开会话侧栏抽屉。 */
+export function IconMenu(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </Icon>
+  );
+}
+
 /** 气泡：会话空态装饰 / 对话导航。 */
 export function IconMessageSquare(props: IconProps) {
   return (

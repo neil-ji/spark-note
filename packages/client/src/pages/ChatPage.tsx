@@ -10,7 +10,8 @@ import {
 } from '../lib/api';
 import type { ChatItem, ToolCallItem } from '../lib/chat';
 import { Markdown } from '../lib/markdown';
-import { IconCheck, IconCopy, IconX } from '../components/icons';
+import { copyTextToClipboard } from '../lib/clipboard';
+import { IconCheck, IconCopy, IconMenu, IconX } from '../components/icons';
 import ConversationSidebar from '../components/ConversationSidebar';
 
 /**
@@ -92,33 +93,7 @@ const TypewriterCursor = forwardRef<HTMLSpanElement>(function TypewriterCursor(_
   return <span ref={ref} aria-hidden="true" className="typewriter-cursor" />;
 });
 
-/** 复制文本到剪贴板：优先 navigator.clipboard（需安全上下文），失败降级 execCommand。 */
-async function copyTextToClipboard(text: string): Promise<boolean> {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // 权限被拒 / 非安全上下文等 → 走降级路径
-    }
-  }
-  try {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(textarea);
-    return ok;
-  } catch {
-    return false;
-  }
-}
-
-/** 消息气泡复制按钮：hover 显示（移动端可聚焦），点击复制完整原文（与 reveal 进度无关），
+/** 消息气泡复制按钮：hover 显示（触屏端 @media(hover:none) 下常显，键盘 focus 也显示），
  *  成功短暂显示对勾，两条剪贴板路径都失败时显示失败态作为提示。 */
 function MessageCopyButton({ text }: { text: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -148,7 +123,7 @@ function MessageCopyButton({ text }: { text: string }) {
       onClick={handleCopy}
       title={label}
       aria-label={label}
-      className="mt-1 shrink-0 rounded-md p-1 text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-200/70 hover:text-neutral-700 focus:opacity-100 focus-visible:outline-none group-hover:opacity-100"
+      className="mt-1 shrink-0 rounded-md p-1 text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-200/70 hover:text-neutral-700 focus:opacity-100 focus-visible:outline-none group-hover:opacity-100 [@media(hover:none)]:opacity-100"
     >
       {state === 'copied' ? (
         <IconCheck className="h-3.5 w-3.5 text-emerald-500" />
@@ -232,6 +207,8 @@ export default function ChatPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [input, setInput] = useState('');
+  // 窄屏（<md）下侧栏作为抽屉：true 时叠加层 + 侧栏浮现。
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   /** 重新拉取会话列表（新建 / 重命名 / 删除 / 一轮对话落盘后刷新标题与时间）。 */
@@ -262,14 +239,29 @@ export default function ChatPage() {
   }, []);
 
   const chat = useChat(activeId, refreshConversations);
-  const { items, status, model, thinkingLevel, skills, queued, wsStatus, canSend, sendMessage, abort } = chat;
+  const {
+    items,
+    status,
+    model,
+    thinkingLevel,
+    skills,
+    queued,
+    wsStatus,
+    canSend,
+    historyLoading,
+    sendMessage,
+    abort,
+  } = chat;
 
   const streaming = status === 'streaming';
 
-  // 新内容到达时滚动到底部。
+  // 新内容到达时滚动到底部（scrollIntoView 兜底，兼容窄屏 min-h 下内部不滚动的流式布局）。
   useEffect(() => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+      el.scrollIntoView({ block: 'end' });
+    }
   }, [items]);
 
   const handleSend = () => {
@@ -286,6 +278,8 @@ export default function ChatPage() {
       const { id } = await createConversation();
       await refreshConversations();
       setActiveId(id);
+      // 窄屏抽屉：新建后收起侧栏，聚焦新会话。
+      setSidebarOpen(false);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : String(e));
     }
@@ -317,17 +311,24 @@ export default function ChatPage() {
 
   const placeholder = !activeId
     ? '请先在左侧新建会话'
-    : canSend
-      ? '输入消息，Enter 发送，Shift+Enter 换行。运行中发送会自动排队。'
-      : 'WebSocket 未连接…';
+    : historyLoading
+      ? '正在加载会话历史…'
+      : canSend
+        ? '输入消息，Enter 发送，Shift+Enter 换行。运行中发送会自动排队。'
+        : 'WebSocket 未连接…';
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] gap-4">
+    <div className="flex h-[calc(100dvh-7rem)] min-h-[24rem] gap-4">
       <ConversationSidebar
         conversations={conversations}
         activeId={activeId}
         loading={listLoading}
-        onSelect={setActiveId}
+        mobileOpen={sidebarOpen}
+        onCloseMobile={() => setSidebarOpen(false)}
+        onSelect={(id) => {
+          setActiveId(id);
+          setSidebarOpen(false);
+        }}
         onCreate={handleCreate}
         onRename={handleRename}
         onDelete={handleDelete}
@@ -336,6 +337,14 @@ export default function ChatPage() {
       <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col gap-4">
         {/* 顶栏：连接状态 / agent 状态 / 模型信息 / abort */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="rounded-md p-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 md:hidden"
+            aria-label="打开会话列表"
+          >
+            <IconMenu className="h-5 w-5" />
+          </button>
           <div className="mr-auto">
             <h1 className="text-lg font-semibold">智能体对话</h1>
             <p className="mt-0.5 text-sm text-neutral-500">
@@ -369,8 +378,15 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* 消息列表 */}
-        <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-4">
+        {/* 消息列表：aria-live 播报容器；流式期间 aria-busy 让读屏器等流式结束后再播报全文，避免逐字打扰 */}
+        <div
+          ref={listRef}
+          role="log"
+          aria-live="polite"
+          aria-busy={streaming}
+          aria-label="消息列表"
+          className="flex-1 space-y-4 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-4"
+        >
           {items.length === 0 && (
             <div className="py-16 text-center">
               {!activeId ? (
