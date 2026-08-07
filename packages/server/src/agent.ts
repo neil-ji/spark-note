@@ -545,6 +545,68 @@ export async function sendPrompt(text: string, conversationId?: string): Promise
   await runtime.session.prompt(text, opts);
 }
 
+/**
+ * 解析重放目标：从指定消息条目沿 parentId 链回退到最近一条 user 消息。
+ *
+ * 目标本身是 user 消息（编辑场景）→ 直接返回目标；目标是 assistant / 工具消息
+ * （重新生成 / 失败重试场景）→ 返回其前置的 user 消息，作为重放分支点。
+ *
+ * 前提（T3a spike 结论）：对 user 消息 navigateTree 会把 leaf 移到其 parentId 并
+ * 返回原文 editorText（重放分支点）；对 assistant 消息 navigateTree 会让 leaf 指向
+ * assistant 自身（追加而非重放），故必须回退到其前置 user 消息。
+ */
+export function findReplayUserEntry(manager: SessionManager, entryId: string): SessionEntry {
+  const path = manager.getBranch(entryId); // [root → entryId]，消息在其后分支中按时间序
+  // 从 entryId 往前找最近一条 user 消息（目标是 user 时，最近者即目标本身）。
+  for (let i = path.length - 1; i >= 0; i--) {
+    const entry = path[i];
+    if (entry.type === 'message' && (entry as SessionMessageEntry).message.role === 'user') {
+      return entry;
+    }
+  }
+  throw new Error(`找不到可重放的用户消息: ${entryId}`);
+}
+
+/**
+ * 截断重放：把会话分支回目标消息所在位置，并从该分支点重跑一轮。
+ *
+ * 语义（T3a spike 结论）：
+ * - `entryId` 为 SDK 会话条目 id（GET /api/conversations/:id/messages 返回）。
+ *   user 消息 → 直接作为分支点；assistant 消息（重新生成 / 失败重试）→ 回退到其
+ *   前置 user 消息作为分支点。
+ * - navigateTree 把 leaf 移到分支点 parentId 并同步 agent.state.messages，其后内容
+ *   进入被遗弃分支（messages API 用 getBranch() 只显示活动路径 → 前端截断）。
+ * - `text` 提供（编辑保存）→ 用新文本重跑该轮；缺省（重新生成 / 重试）→ 复用原 user
+ *   文本（navigateTree 返回的 editorText）。
+ * - 流式期间拒绝重放（navigateTree 对 isStreaming 抛错，这里显式校验给前端清晰错误）。
+ */
+export async function replayConversation(conversationId: string, entryId: string, text?: string): Promise<void> {
+  const runtime = await getAgentRuntime(conversationId);
+  activeConversationId = runtime.conversationId;
+  if (runtime.session.isStreaming) {
+    throw new Error('当前会话正在运行，请等待本轮结束再重放');
+  }
+  const sessionManager = runtime.session.sessionManager;
+  const targetEntry = sessionManager.getEntry(entryId);
+  if (!targetEntry) {
+    throw new Error(`消息不存在: ${entryId}`);
+  }
+  const userEntry = findReplayUserEntry(sessionManager, entryId);
+  const { editorText, cancelled } = await runtime.session.navigateTree(userEntry.id);
+  if (cancelled) return; // 扩展层取消导航 → 不重跑
+  const promptText = (text?.trim() || editorText?.trim() || '').trim();
+  if (!promptText) {
+    throw new Error('重放消息文本为空');
+  }
+  // 与 sendPrompt 同款参数：空闲直接运行，navigateTree 后 leaf 已移到分支点故无需 followUp；
+  // expandPromptTemplates 显式开启保证 /name 模板在重放时同样展开。
+  const opts = {
+    ...(runtime.session.isStreaming ? { streamingBehavior: 'followUp' as const } : {}),
+    expandPromptTemplates: true as const,
+  };
+  await runtime.session.prompt(promptText, opts);
+}
+
 /** 中断指定会话（缺省当前活跃会话）的 agent 运行（空闲时为空操作）。 */
 export async function abortRun(conversationId?: string): Promise<void> {
   const id = conversationId ?? activeConversationId;

@@ -201,6 +201,28 @@ export function IconMic(props: IconProps) {
   );
 }
 
+/** 刷新（refresh-cw）：重新生成助手回复。 */
+export function IconRefresh(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M8 16H3v5" />
+    </Icon>
+  );
+}
+
+/** 回转（rotate-ccw）：重试失败轮次。 */
+export function IconRetry(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </Icon>
+  );
+}
+
 /** 齿轮：设置入口。 */
 export function IconSettings(props: IconProps) {
   return (

@@ -49,6 +49,8 @@ export interface ChatItem {
   tools: ToolCallItem[];
   status: 'streaming' | 'done' | 'error';
   error?: string;
+  /** SDK 会话条目 id：编辑/重新生成/重试的重放目标。实时流式消息为 null，历史加载 / settle 同步后填充。 */
+  entryId: string | null;
 }
 
 export interface ChatState {
@@ -81,12 +83,28 @@ export const initialChatState: ChatState = {
   queued: [],
 };
 
+export interface HistoryMessage {
+  id: string;
+  role: string;
+  text: string;
+}
+
 export type ChatAction =
   | { type: 'send'; text: string }
   | { type: 'snapshot'; snapshot: AgentStateSnapshot }
   | { type: 'event'; event: AgentWsEvent }
   | { type: 'reset'; conversationId: string | null }
-  | { type: 'history'; conversationId: string | null; messages: { role: string; text: string }[] };
+  | { type: 'history'; conversationId: string | null; messages: HistoryMessage[] }
+  /**
+   * 截断重放：以 entryId（user 消息）为分支点，保留该条（编辑时替换其文本）并把其后消息全部清除。
+   * 编辑/重新生成/重试共用：目标都是 user 消息（assistant 目标 → 其前置 user 的分支点）。
+   */
+  | { type: 'truncate'; entryId: string; text?: string }
+  /**
+   * 同步 entryId：把服务端活动分支的 SDK 条目 id 按位置对回现有消息（只补 entryId，
+   * 不改文本/角色/状态），让编辑/重新生成/重试有可用的重放目标；不删除/覆盖任何消息。
+   */
+  | { type: 'syncEntries'; messages: HistoryMessage[] };
 
 function newId(): string {
   return crypto.randomUUID();
@@ -147,7 +165,15 @@ function applyEvent(state: ChatState, e: AgentWsEvent): ChatState {
 
     case 'message_start':
       if (e.role === 'assistant') {
-        const item: ChatItem = { id: newId(), role: 'assistant', text: '', thinking: '', tools: [], status: 'streaming' };
+        const item: ChatItem = {
+          id: newId(),
+          role: 'assistant',
+          text: '',
+          thinking: '',
+          tools: [],
+          status: 'streaming',
+          entryId: null,
+        };
         return { ...state, items: [...state.items, item], currentIdx: state.items.length, pendingToolArgs: '' };
       }
       return state;
@@ -206,7 +232,15 @@ function applyEvent(state: ChatState, e: AgentWsEvent): ChatState {
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'send': {
-      const user: ChatItem = { id: newId(), role: 'user', text: action.text, thinking: '', tools: [], status: 'done' };
+      const user: ChatItem = {
+        id: newId(),
+        role: 'user',
+        text: action.text,
+        thinking: '',
+        tools: [],
+        status: 'done',
+        entryId: null,
+      };
       return { ...state, items: [...state.items, user] };
     }
     case 'snapshot':
@@ -234,8 +268,30 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         thinking: '',
         tools: [],
         status: 'done' as const,
+        entryId: m.id || null,
       }));
       return { ...state, items, currentIdx: null, pendingToolArgs: '', queued: [] };
+    }
+    case 'truncate': {
+      // 截断重放：entryId 定位目标消息。user 目标 → 保留到该条（含，可选替换文本）并清除其后；
+      // assistant 目标（防御）→ 清除该条与其后。流式状态一并清空，等待重放事件重建。
+      const idx = state.items.findIndex((it) => it.entryId === action.entryId);
+      if (idx < 0) return state;
+      if (state.items[idx].role === 'assistant') {
+        return { ...state, items: state.items.slice(0, idx), currentIdx: null, pendingToolArgs: '', queued: [] };
+      }
+      const items = state.items.slice(0, idx + 1);
+      if (action.text !== undefined) items[idx] = { ...items[idx], text: action.text };
+      return { ...state, items, currentIdx: null, pendingToolArgs: '', queued: [] };
+    }
+    case 'syncEntries': {
+      // 按位置把服务端活动分支的 entryId 补到对应消息上（只补空缺，避免迟到响应覆盖新重放目标）。
+      const items = state.items.map((it, i) => {
+        const hist = action.messages[i];
+        if (hist && hist.role === it.role && !it.entryId) return { ...it, entryId: hist.id };
+        return it;
+      });
+      return { ...state, items };
     }
     default:
       return state;

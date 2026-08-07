@@ -74,16 +74,18 @@ function extractMessageText(message: { content?: unknown }): string {
   return parts.join('\n');
 }
 
-/** 会话条目 → role + text 消息列表（跳过无文本内容的消息）。 */
-function entriesToMessages(entries: SessionEntry[]): { role: string; text: string }[] {
-  const messages: { role: string; text: string }[] = [];
+/** 会话条目 → { id, role, text } 消息列表（跳过无文本内容的消息；id 为 SDK 条目 id，重放目标）。 */
+function entriesToMessages(
+  entries: SessionEntry[],
+): { id: string; role: string; text: string }[] {
+  const messages: { id: string; role: string; text: string }[] = [];
   for (const entry of entries) {
     if (entry.type !== 'message') continue;
     const msg = (entry as SessionMessageEntry).message;
     if (!msg || typeof msg.role !== 'string') continue;
     const text = extractMessageText(msg as unknown as { content?: unknown }).trim();
     if (!text) continue;
-    messages.push({ role: msg.role, text });
+    messages.push({ id: entry.id, role: msg.role, text });
   }
   return messages;
 }
@@ -120,10 +122,12 @@ export async function registerConversationRoutes(app: FastifyInstance): Promise<
       return { error: `会话不存在: ${req.params.id}` };
     }
     const manager = SessionManager.open(filePath, SESSION_DIR);
+    // 只返回活动分支（leaf 沿 parentId 链到 root）：重放/分支后，被遗弃分支不再显示，
+    // 从根上实现"重放后该轮后续消息被替换/截断"。getBranch() 按 [root → leaf] 时间序。
     return {
       id: req.params.id,
       name: manager.getSessionName() ?? '',
-      messages: entriesToMessages(manager.getEntries()),
+      messages: entriesToMessages(manager.getBranch()),
     };
   });
 
