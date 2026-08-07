@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { listContentIssues, type ContentIssue } from '../lib/api';
+import { IconFileText, IconGlobe, IconImage } from '../components/icons';
 
 /** 内容类型徽章配色。 */
 const BADGE_STYLES: Record<'manuscript' | 'html' | 'png', string> = {
@@ -24,7 +25,7 @@ function ManuscriptView({ issue }: { issue: ContentIssue }) {
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-5">
       <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-        <span aria-hidden>📝</span> 文稿
+        <IconFileText className="h-4 w-4" /> 文稿
       </h3>
       <pre className="mt-3 whitespace-pre-wrap font-sans text-[13.5px] leading-7 text-neutral-700">
         {issue.manuscript}
@@ -38,7 +39,7 @@ function HtmlPreview({ issue }: { issue: ContentIssue }) {
     <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
       <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
         <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-          <span aria-hidden>🌐</span> HTML 预览
+          <IconGlobe className="h-4 w-4" /> HTML 预览
         </h3>
         <a
           href={issue.htmlUrl ?? undefined}
@@ -65,7 +66,7 @@ function PngGallery({ issue }: { issue: ContentIssue }) {
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-5">
       <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-        <span aria-hidden>🖼️</span> 卡片预览
+        <IconImage className="h-4 w-4" /> 卡片预览
         <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600">
           {issue.pngs.length} 张
         </span>
